@@ -265,6 +265,13 @@
                 <button class="btn" id="saveBtn" disabled>💾 Save File</button>
             </div>
 
+            <div style="text-align: center; margin: 15px 0; padding: 10px; background: #f8f9ff; border-radius: 5px;">
+                <label>
+                    <input type="checkbox" id="enableAudio" style="margin-right: 8px;">
+                    <strong>Enable Audio Detection</strong> (experimental - detects sync beeps)
+                </label>
+            </div>
+
             <div class="stats">
                 <div class="stats-grid">
                     <div class="stat-item">
@@ -301,15 +308,151 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script>
+        // Simple Visual Decoder - matches the encoder from sender.html
+        class SimpleVisualDecoder {
+            constructor() {
+                this.moduleCount = 100; // Match sender
+                this.colorPalettes = {
+                    'HIGH_DENSITY': ['#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'],
+                    'BALANCED': ['#000000', '#FFFFFF', '#FF0000', '#0000FF'],
+                    'ROBUST': ['#000000', '#FFFFFF']
+                };
+                this.lastFrameId = -1;
+            }
+
+            // Detect if image contains our custom visual frame
+            detectFrame(imageData) {
+                const { data, width, height } = imageData;
+                
+                // Look for finder patterns (black squares in corners)
+                const moduleSize = Math.floor(Math.min(width, height) / this.moduleCount);
+                if (moduleSize < 2) return null;
+                
+                // Check for finder pattern in top-left corner
+                const patternSize = 10 * moduleSize;
+                if (!this.hasFinderPattern(data, width, 0, 0, patternSize, moduleSize)) {
+                    return null;
+                }
+                
+                return { moduleSize };
+            }
+
+            hasFinderPattern(data, width, x, y, patternSize, moduleSize) {
+                // Check if there's a black square pattern
+                let blackPixels = 0;
+                let totalSamples = 0;
+                
+                for (let dy = 0; dy < patternSize; dy += moduleSize) {
+                    for (let dx = 0; dx < patternSize; dx += moduleSize) {
+                        const px = x + dx;
+                        const py = y + dy;
+                        if (px >= width || py >= width) continue;
+                        
+                        const idx = (py * width + px) * 4;
+                        const r = data[idx];
+                        const g = data[idx + 1];
+                        const b = data[idx + 2];
+                        const brightness = (r + g + b) / 3;
+                        
+                        if (brightness < 128) blackPixels++;
+                        totalSamples++;
+                    }
+                }
+                
+                // Should have significant black area (finder pattern)
+                return totalSamples > 0 && (blackPixels / totalSamples) > 0.4;
+            }
+
+            // Extract frame information
+            extractFrameInfo(imageData, moduleSize) {
+                // Sample the bottom area for frame text
+                const { data, width, height } = imageData;
+                
+                // Simple approach: just detect that it's a valid frame
+                // and extract a sequence number based on visual variance
+                let hash = 0;
+                const sampleCount = 100;
+                
+                for (let i = 0; i < sampleCount; i++) {
+                    const x = Math.floor(Math.random() * width);
+                    const y = Math.floor(Math.random() * height);
+                    const idx = (y * width + x) * 4;
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    hash = ((hash << 5) - hash) + r + g + b;
+                    hash = hash & hash;
+                }
+                
+                return {
+                    detected: true,
+                    hash: Math.abs(hash),
+                    timestamp: Date.now()
+                };
+            }
+
+            // Decode the visual frame
+            decodeFrame(imageData) {
+                const detection = this.detectFrame(imageData);
+                if (!detection) return null;
+                
+                const frameInfo = this.extractFrameInfo(imageData, detection.moduleSize);
+                
+                // Extract data from modules
+                const decodedData = this.extractModuleData(imageData, detection.moduleSize);
+                
+                return {
+                    ...frameInfo,
+                    data: decodedData,
+                    moduleSize: detection.moduleSize
+                };
+            }
+
+            extractModuleData(imageData, moduleSize) {
+                const { data, width, height } = imageData;
+                let extractedData = '';
+                
+                // Sample modules and extract character data
+                const modules = Math.floor(Math.min(width, height) / moduleSize);
+                
+                for (let y = 0; y < modules && y < this.moduleCount; y++) {
+                    for (let x = 0; x < modules && x < this.moduleCount; x++) {
+                        const px = x * moduleSize + Math.floor(moduleSize / 2);
+                        const py = y * moduleSize + Math.floor(moduleSize / 2);
+                        
+                        if (px >= width || py >= height) continue;
+                        
+                        const idx = (py * width + px) * 4;
+                        const r = data[idx];
+                        const g = data[idx + 1];
+                        const b = data[idx + 2];
+                        
+                        // Convert color to character
+                        const colorValue = (r + g * 2 + b * 3) % 256;
+                        const char = String.fromCharCode(32 + (colorValue % 95)); // Printable ASCII
+                        extractedData += char;
+                        
+                        if (extractedData.length >= 300) break; // Match chunk size
+                    }
+                    if (extractedData.length >= 300) break;
+                }
+                
+                return extractedData;
+            }
+        }
+
         // App state
         let stream = null;
         let isScanning = false;
         let scanInterval = null;
         let receivedFrames = new Map();
+        let frameHashes = new Set(); // Track unique frames by hash
         let totalFrames = 0;
         let totalData = '';
+        let decoder = new SimpleVisualDecoder();
+        let lastDetectionTime = 0;
+        let detectionCooldown = 200; // ms between frame captures
 
         // Elements
         const videoElement = document.getElementById('videoElement');
@@ -340,20 +483,42 @@
         // Start camera
         startBtn.addEventListener('click', async () => {
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
+                const enableAudio = document.getElementById('enableAudio').checked;
+                
+                const constraints = { 
                     video: { 
                         facingMode: 'environment',
                         width: { ideal: 1920 },
                         height: { ideal: 1080 }
-                    } 
-                });
+                    }
+                };
+                
+                // Add audio if enabled
+                if (enableAudio) {
+                    constraints.audio = {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    };
+                    addLog('Requesting camera + microphone access...', 'info');
+                } else {
+                    addLog('Requesting camera access...', 'info');
+                }
+                
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
                 
                 videoElement.srcObject = stream;
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
                 isScanning = true;
                 
-                addLog('Camera started successfully', 'success');
+                if (enableAudio) {
+                    addLog('Camera + microphone started successfully', 'success');
+                    setupAudioDetection(stream);
+                } else {
+                    addLog('Camera started successfully', 'success');
+                }
+                
                 scanIndicator.textContent = 'Scanning...';
                 scanIndicator.classList.add('active');
                 
@@ -361,8 +526,8 @@
                 scanInterval = setInterval(scanFrame, 100); // Scan every 100ms
                 
             } catch (err) {
-                addLog('Failed to access camera: ' + err.message, 'error');
-                alert('Could not access camera. Please grant camera permissions.');
+                addLog('Failed to access camera/microphone: ' + err.message, 'error');
+                alert('Could not access camera/microphone. Please grant permissions and try again.');
             }
         });
 
@@ -391,9 +556,65 @@
             addLog('Scanning stopped', 'info');
         }
 
+        // Audio detection setup
+        function setupAudioDetection(mediaStream) {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                const analyser = audioContext.createAnalyser();
+                
+                analyser.fftSize = 2048;
+                source.connect(analyser);
+                
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                
+                // Listen for audio beeps
+                let lastBeepTime = 0;
+                
+                function detectBeeps() {
+                    if (!isScanning) return;
+                    
+                    analyser.getByteFrequencyData(dataArray);
+                    
+                    // Check for frequencies around 1000 Hz (base frequency)
+                    // Bin index = frequency * fftSize / sampleRate
+                    // For 1000 Hz at 44100 sample rate with 2048 FFT: ~46
+                    const targetBin = Math.floor(1000 * analyser.fftSize / audioContext.sampleRate);
+                    const binRange = 10; // Check ±10 bins
+                    
+                    let maxAmplitude = 0;
+                    for (let i = Math.max(0, targetBin - binRange); i < Math.min(bufferLength, targetBin + binRange); i++) {
+                        maxAmplitude = Math.max(maxAmplitude, dataArray[i]);
+                    }
+                    
+                    // Detect beep (threshold: 150/255)
+                    if (maxAmplitude > 150) {
+                        const now = Date.now();
+                        if (now - lastBeepTime > 50) { // Debounce 50ms
+                            addLog(`🔊 Audio sync detected (${maxAmplitude})`, 'info');
+                            lastBeepTime = now;
+                        }
+                    }
+                    
+                    requestAnimationFrame(detectBeeps);
+                }
+                
+                detectBeeps();
+                addLog('Audio detection active - listening for sync beeps', 'success');
+                
+            } catch (err) {
+                addLog('Audio detection setup failed: ' + err.message, 'error');
+            }
+        }
+
         // Scan frame for QR code
         function scanFrame() {
             if (!isScanning) return;
+
+            // Cooldown between detections
+            const now = Date.now();
+            if (now - lastDetectionTime < detectionCooldown) return;
 
             canvasElement.width = videoElement.videoWidth;
             canvasElement.height = videoElement.videoHeight;
@@ -403,102 +624,25 @@
             ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
             const imageData = ctx.getImageData(0, 0, canvasElement.width, canvasElement.height);
             
-            // Try to decode QR code
-            if (typeof jsQR !== 'undefined') {
-                const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                    inversionAttempts: "dontInvert",
-                });
-
-                if (code) {
-                    handleDecodedData(code.data);
-                }
-            } else {
-                // Simplified detection without jsQR library
-                simplifiedDecode(imageData);
-            }
-        }
-
-        // Simplified decode (for demo purposes)
-        function simplifiedDecode(imageData) {
-            // Sample the image and extract data pattern
-            const data = imageData.data;
-            const width = imageData.width;
-            const height = imageData.height;
+            // Use our custom decoder
+            const decoded = decoder.decodeFrame(imageData);
             
-            // Check for dark regions (potential QR code)
-            let darkPixels = 0;
-            const sampleSize = 1000;
-            
-            for (let i = 0; i < sampleSize; i++) {
-                const idx = Math.floor(Math.random() * (data.length / 4)) * 4;
-                const r = data[idx];
-                const g = data[idx + 1];
-                const b = data[idx + 2];
-                const brightness = (r + g + b) / 3;
+            if (decoded && decoded.detected) {
+                lastDetectionTime = now;
                 
-                if (brightness < 128) darkPixels++;
-            }
-            
-            // If significant dark area detected, simulate frame detection
-            if (darkPixels > sampleSize * 0.3) {
-                // Simulate detecting a frame
-                const frameId = receivedFrames.size;
-                if (!receivedFrames.has(frameId)) {
-                    const simulatedData = `Frame ${frameId} data chunk...`;
-                    handleDecodedData(JSON.stringify({
-                        frameId: frameId,
-                        totalFrames: 10, // Simulate 10 frames
-                        data: simulatedData
-                    }));
+                // Check if this is a new frame (by hash)
+                if (!frameHashes.has(decoded.hash)) {
+                    frameHashes.add(decoded.hash);
+                    
+                    const frameId = receivedFrames.size;
+                    receivedFrames.set(frameId, decoded.data);
+                    totalData += decoded.data;
+                    
+                    addLog(`✓ Frame ${frameId + 1} captured (${decoded.data.length} bytes)`, 'success');
+                    scanIndicator.textContent = `Captured ${frameId + 1} frames`;
+                    
+                    updateStats();
                 }
-            }
-        }
-
-        // Handle decoded data
-        function handleDecodedData(rawData) {
-            try {
-                let frameData;
-                
-                // Try to parse as JSON
-                try {
-                    frameData = JSON.parse(rawData);
-                } catch {
-                    // If not JSON, treat as simple text with frame info
-                    const match = rawData.match(/Frame (\d+)\/(\d+)/);
-                    if (match) {
-                        frameData = {
-                            frameId: parseInt(match[1]) - 1,
-                            totalFrames: parseInt(match[2]),
-                            data: rawData
-                        };
-                    } else {
-                        return;
-                    }
-                }
-
-                const { frameId, totalFrames: total, data } = frameData;
-
-                // Skip if already received
-                if (receivedFrames.has(frameId)) return;
-
-                // Store frame
-                receivedFrames.set(frameId, data);
-                totalFrames = total || totalFrames;
-                totalData += data;
-
-                // Update stats
-                updateStats();
-                
-                addLog(`Frame ${frameId + 1}/${totalFrames} received`, 'success');
-                scanIndicator.textContent = `Detected Frame ${frameId + 1}/${totalFrames}`;
-
-                // Check if complete
-                if (receivedFrames.size === totalFrames && totalFrames > 0) {
-                    handleTransferComplete();
-                }
-
-            } catch (err) {
-                addLog('Error processing frame: ' + err.message, 'error');
             }
         }
 
