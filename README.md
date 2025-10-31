@@ -314,9 +314,7 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ## 📞 Contact & Support
 
-- **Issues:** [GitHub Issues](https://github.com/yourusername/hvatp/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/hvatp/discussions)
-- **Email:** hvatp-dev@example.com
+- **Email:** rogerjs93@gmail.com
 
 ---
 
