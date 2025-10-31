@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HVATP Web Demo - Test It Now!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.95;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .demo-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .option-card {
+            background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
+            padding: 30px;
+            border-radius: 15px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .option-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
+        }
+
+        .option-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .option-card h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .option-card p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-block;
+            font-weight: 600;
+            text-decoration: none;
+            margin-top: 15px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .instructions {
+            background: #f8f9ff;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .instructions h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .steps {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+
+        .steps li {
+            counter-increment: step-counter;
+            margin-bottom: 20px;
+            padding-left: 50px;
+            position: relative;
+        }
+
+        .steps li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .feature {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .qr-demo {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .qr-demo img {
+            max-width: 200px;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 HVATP Web Demo</h1>
+            <p>Transfer files between devices using visual QR codes</p>
+            <p style="font-size: 0.9em; margin-top: 10px; opacity: 0.8;">
+                No WiFi • No Bluetooth • No Pairing • Just Point & Transfer
+            </p>
+        </div>
+
+        <div class="content">
+            <div class="instructions">
+                <h3>📋 How to Test</h3>
+                <ol class="steps">
+                    <li>
+                        <strong>Open Sender on Desktop/Laptop</strong><br>
+                        Click "Open Sender" below to open the sender application
+                    </li>
+                    <li>
+                        <strong>Upload a File</strong><br>
+                        Choose a small file (text, image, etc.) under 100 KB for testing
+                    </li>
+                    <li>
+                        <strong>Start Transfer</strong><br>
+                        Click "Start Transfer" - animated QR codes will display on screen
+                    </li>
+                    <li>
+                        <strong>Open Receiver on Phone</strong><br>
+                        Open the receiver on your phone and grant camera access
+                    </li>
+                    <li>
+                        <strong>Scan the Screen</strong><br>
+                        Point your phone camera at the desktop screen showing QR codes
+                    </li>
+                    <li>
+                        <strong>Watch the Magic!</strong><br>
+                        See frames being detected and assembled in real-time
+                    </li>
+                </ol>
+            </div>
+
+            <div class="demo-options">
+                <div class="option-card" onclick="window.open('sender.html', '_blank')">
+                    <div class="option-icon">🖥️</div>
+                    <h2>Sender</h2>
+                    <p>Upload and transmit files by displaying QR codes on screen</p>
+                    <a href="sender.html" class="btn" target="_blank">Open Sender</a>
+                </div>
+
+                <div class="option-card" onclick="window.open('receiver.html', '_blank')">
+                    <div class="option-icon">📱</div>
+                    <h2>Receiver</h2>
+                    <p>Scan QR codes with your phone camera to receive files</p>
+                    <a href="receiver.html" class="btn" target="_blank">Open Receiver</a>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <h3>✨ Features</h3>
+                <div class="features">
+                    <div class="feature">
+                        <h4>🎨 Multi-Color Encoding</h4>
+                        <p>Choose between 2, 4, or 8 color modes for different speed/reliability trade-offs</p>
+                    </div>
+                    <div class="feature">
+                        <h4>🛡️ Error Correction</h4>
+                        <p>Built-in error correction (25%-50%) ensures reliable transfer</p>
+                    </div>
+                    <div class="feature">
+                        <h4>📊 Real-Time Stats</h4>
+                        <p>Monitor frame rate, throughput, and progress in real-time</p>
+                    </div>
+                    <div class="feature">
+                        <h4>🔒 Local Processing</h4>
+                        <p>All processing happens in your browser - no data sent to servers</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <h3>💡 Tips for Best Results</h3>
+                <ul style="padding-left: 20px; line-height: 2;">
+                    <li>✅ Use good lighting (avoid glare)</li>
+                    <li>✅ Keep phone 1-2 meters from screen</li>
+                    <li>✅ Hold phone steady</li>
+                    <li>✅ Start with small files (< 50 KB)</li>
+                    <li>✅ Use "Balanced" or "Robust" mode for first test</li>
+                    <li>✅ Lower frame rate (15-30 fps) for more reliable scanning</li>
+                </ul>
+            </div>
+
+            <div style="text-align: center; margin-top: 40px; padding: 30px; background: #f8f9ff; border-radius: 15px;">
+                <h3 style="margin-bottom: 20px;">🔗 Quick Access</h3>
+                <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                    <a href="sender.html" class="btn" target="_blank">🖥️ Open Sender</a>
+                    <a href="receiver.html" class="btn" target="_blank">📱 Open Receiver</a>
+                    <a href="../README.md" class="btn" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">📖 Documentation</a>
+                </div>
+                
+                <div class="qr-demo" style="margin-top: 30px;">
+                    <p style="margin-bottom: 15px; color: #666;">
+                        <strong>Quick Access via QR Code (for phone):</strong>
+                    </p>
+                    <p style="font-size: 0.9em; color: #999;">
+                        Scan to open receiver on your phone<br>
+                        (Generate QR code for: https://rogerjs93.github.io/Hibriddatatransfer/webapp/receiver.html)
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align: center; padding: 40px 20px; color: white;">
+        <p style="font-size: 1.1em; margin-bottom: 10px;">
+            🌟 HVATP - Hybrid Visual + Audio Transfer Protocol
+        </p>
+        <p style="opacity: 0.8;">
+            Open source project • MIT License • 
+            <a href="https://github.com/rogerjs93/Hibriddatatransfer" style="color: white; text-decoration: underline;">View on GitHub</a>
+        </p>
+    </div>
+</body>
+</html>
