@@ -274,6 +274,13 @@
                         <option value="60">60 fps (Fast)</option>
                     </select>
                 </div>
+
+                <div class="setting-group">
+                    <label for="audioChannel">
+                        <input type="checkbox" id="audioChannel" checked style="width: auto; margin-right: 10px;">
+                        Enable Audio Channel (Sync + Metadata)
+                    </label>
+                </div>
             </div>
 
             <div style="text-align: center;">
@@ -415,6 +422,92 @@
             }
         }
 
+        // Simple Audio Encoder for synchronization and metadata
+        class SimpleAudioEncoder {
+            constructor() {
+                this.sampleRate = 44100; // Standard audio sample rate
+                this.duration = 0.1; // 100ms beeps
+                this.baseFreq = 1000; // 1 kHz base frequency
+                this.audioContext = null;
+            }
+
+            async init() {
+                if (!this.audioContext) {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            // Generate sync beep for frame start
+            async playFrameSync(frameId) {
+                await this.init();
+                
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                // Frequency encodes frame number (simple modulation)
+                oscillator.frequency.value = this.baseFreq + (frameId % 10) * 100;
+                oscillator.type = 'sine';
+                
+                // Quick beep
+                gainNode.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + this.duration);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + this.duration);
+            }
+
+            // Generate metadata announcement (filename, size)
+            async playMetadata(filename, filesize, totalFrames) {
+                await this.init();
+                
+                // Play a distinctive triple beep pattern
+                const beeps = [800, 1200, 1600]; // Low-Mid-High frequency pattern
+                
+                for (let i = 0; i < beeps.length; i++) {
+                    const oscillator = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    
+                    oscillator.frequency.value = beeps[i];
+                    oscillator.type = 'sine';
+                    
+                    const startTime = this.audioContext.currentTime + (i * 0.15);
+                    gainNode.gain.setValueAtTime(0.15, startTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.1);
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.audioContext.destination);
+                    
+                    oscillator.start(startTime);
+                    oscillator.stop(startTime + 0.1);
+                }
+            }
+
+            // Generate end-of-transfer signal
+            async playEndSignal() {
+                await this.init();
+                
+                // Play descending tone
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                oscillator.frequency.setValueAtTime(1500, this.audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(500, this.audioContext.currentTime + 0.3);
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0.2, this.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + 0.3);
+            }
+        }
+
         // App state
         let selectedFile = null;
         let isTransferring = false;
@@ -423,6 +516,7 @@
         let frames = [];
         let transferInterval = null;
         let startTime = null;
+        let audioEncoder = null;
 
         // Elements
         const uploadSection = document.getElementById('uploadSection');
@@ -433,6 +527,7 @@
         const displayArea = document.getElementById('displayArea');
         const qrDisplay = document.getElementById('qrDisplay');
         const stats = document.getElementById('stats');
+        const audioChannelCheckbox = document.getElementById('audioChannel');
 
         // File selection
         uploadSection.addEventListener('click', () => fileInput.click());
@@ -502,7 +597,6 @@
             const fps = parseInt(document.getElementById('frameRate').value);
 
             // Show progress indicator
-            const startBtn = document.getElementById('startTransferBtn');
             startBtn.textContent = 'Encoding...';
             startBtn.disabled = true;
 
@@ -543,6 +637,14 @@
                     startBtn.textContent = 'Start Transfer';
                     startBtn.disabled = false;
                     
+                    // Initialize audio encoder if enabled
+                    if (audioChannelCheckbox.checked) {
+                        audioEncoder = new SimpleAudioEncoder();
+                        await audioEncoder.init();
+                        // Play metadata announcement
+                        await audioEncoder.playMetadata(selectedFile.name, selectedFile.size, frames.length);
+                    }
+                    
                     // Start displaying
                     startTransfer(fps);
                 } catch (error) {
@@ -569,6 +671,12 @@
             transferInterval = setInterval(() => {
                 if (!isPaused && currentFrame < frames.length) {
                     displayFrame(frames[currentFrame]);
+                    
+                    // Play audio sync beep if enabled
+                    if (audioEncoder && audioChannelCheckbox.checked) {
+                        audioEncoder.playFrameSync(currentFrame);
+                    }
+                    
                     currentFrame++;
                     updateStats();
                 } else if (currentFrame >= frames.length) {
@@ -606,6 +714,12 @@
                 clearInterval(transferInterval);
                 transferInterval = null;
             }
+            
+            // Play end signal if audio is enabled and transfer completed
+            if (audioEncoder && audioChannelCheckbox.checked && currentFrame >= frames.length) {
+                audioEncoder.playEndSignal();
+            }
+            
             isTransferring = false;
             startBtn.disabled = false;
             pauseBtn.textContent = '⏸ Pause';
