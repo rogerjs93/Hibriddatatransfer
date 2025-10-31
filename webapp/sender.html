@@ -320,7 +320,7 @@
             constructor(mode = 'BALANCED', eccLevel = 0.35) {
                 this.mode = mode;
                 this.eccLevel = eccLevel;
-                this.moduleCount = 150; // Smaller for web demo
+                this.moduleCount = 100; // Reduced from 150 for better performance
                 this.colors = this.getColorPalette();
             }
 
@@ -340,19 +340,47 @@
                 canvas.height = this.moduleCount * moduleSize;
                 const ctx = canvas.getContext('2d');
 
-                // Fill with pattern based on data
+                // Use ImageData for faster pixel manipulation
+                const imageData = ctx.createImageData(canvas.width, canvas.height);
+                const pixels = imageData.data;
+
+                // Pre-convert colors to RGB
+                const colorRGB = this.colors.map(c => {
+                    const r = parseInt(c.substr(1, 2), 16);
+                    const g = parseInt(c.substr(3, 2), 16);
+                    const b = parseInt(c.substr(5, 2), 16);
+                    return [r, g, b];
+                });
+
+                // Fill with pattern based on data (optimized)
+                let dataIdx = 0;
                 for (let y = 0; y < this.moduleCount; y++) {
                     for (let x = 0; x < this.moduleCount; x++) {
-                        const index = (y * this.moduleCount + x) % data.length;
-                        const byte = data.charCodeAt(index);
+                        const byte = data.charCodeAt(dataIdx % data.length);
                         const colorIndex = byte % this.colors.length;
+                        const [r, g, b] = colorRGB[colorIndex];
                         
-                        ctx.fillStyle = this.colors[colorIndex];
-                        ctx.fillRect(x * moduleSize, y * moduleSize, moduleSize, moduleSize);
+                        // Fill module (moduleSize x moduleSize block)
+                        for (let dy = 0; dy < moduleSize; dy++) {
+                            for (let dx = 0; dx < moduleSize; dx++) {
+                                const pixelX = x * moduleSize + dx;
+                                const pixelY = y * moduleSize + dy;
+                                const pixelIndex = (pixelY * canvas.width + pixelX) * 4;
+                                
+                                pixels[pixelIndex] = r;
+                                pixels[pixelIndex + 1] = g;
+                                pixels[pixelIndex + 2] = b;
+                                pixels[pixelIndex + 3] = 255; // Alpha
+                            }
+                        }
+                        dataIdx++;
                     }
                 }
 
-                // Add finder patterns
+                // Put the image data on canvas
+                ctx.putImageData(imageData, 0, 0);
+
+                // Add finder patterns (after pixel data)
                 this.addFinderPatterns(ctx, moduleSize);
 
                 // Add frame info
@@ -432,9 +460,31 @@
 
         function handleFileSelect(file) {
             selectedFile = file;
+            
+            // Check file size and warn if too large
+            const maxRecommendedSize = 100 * 1024; // 100 KB
+            const maxSize = 500 * 1024; // 500 KB hard limit
+            
+            if (file.size > maxSize) {
+                alert(`⚠️ File too large! Maximum size is 500 KB.\n\nYour file: ${formatFileSize(file.size)}\n\nPlease choose a smaller file or compress it.`);
+                selectedFile = null;
+                startBtn.disabled = true;
+                return;
+            }
+            
+            if (file.size > maxRecommendedSize) {
+                const proceed = confirm(`⚠️ Large file warning!\n\nFile size: ${formatFileSize(file.size)}\nRecommended: < 100 KB\n\nEncoding may take a while and consume significant CPU.\n\nContinue anyway?`);
+                if (!proceed) {
+                    selectedFile = null;
+                    startBtn.disabled = true;
+                    return;
+                }
+            }
+            
             startBtn.disabled = false;
             uploadSection.querySelector('h2').textContent = `✓ ${file.name} (${formatFileSize(file.size)})`;
             document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            stats.classList.add('active');
         }
 
         function formatFileSize(bytes) {
@@ -451,27 +501,56 @@
             const ecc = parseFloat(document.getElementById('errorCorrection').value);
             const fps = parseInt(document.getElementById('frameRate').value);
 
+            // Show progress indicator
+            const startBtn = document.getElementById('startTransferBtn');
+            startBtn.textContent = 'Encoding...';
+            startBtn.disabled = true;
+
             // Read file
             const reader = new FileReader();
             reader.onload = async (e) => {
-                const data = e.target.result;
-                
-                // Encode frames
-                const encoder = new SimpleVisualEncoder(mode, ecc);
-                const chunkSize = 500; // bytes per frame
-                const totalFrames = Math.ceil(data.length / chunkSize);
-                
-                frames = [];
-                for (let i = 0; i < totalFrames; i++) {
-                    const chunk = data.substr(i * chunkSize, chunkSize);
-                    const canvas = encoder.encodeFrame(chunk, i, totalFrames);
-                    frames.push(canvas);
-                }
+                try {
+                    const data = e.target.result;
+                    
+                    // Encode frames with chunked processing to prevent timeout
+                    const encoder = new SimpleVisualEncoder(mode, ecc);
+                    const chunkSize = 300; // Reduced from 500 for faster encoding
+                    const totalFrames = Math.ceil(data.length / chunkSize);
+                    
+                    frames = [];
+                    
+                    // Process frames in batches to avoid blocking
+                    const batchSize = 5; // Process 5 frames at a time
+                    for (let i = 0; i < totalFrames; i += batchSize) {
+                        const batchEnd = Math.min(i + batchSize, totalFrames);
+                        
+                        // Process batch
+                        for (let j = i; j < batchEnd; j++) {
+                            const chunk = data.substr(j * chunkSize, chunkSize);
+                            const canvas = encoder.encodeFrame(chunk, j, totalFrames);
+                            frames.push(canvas);
+                        }
+                        
+                        // Update progress
+                        const progress = ((i + batchSize) / totalFrames * 100).toFixed(0);
+                        startBtn.textContent = `Encoding... ${Math.min(progress, 100)}%`;
+                        
+                        // Yield to browser to prevent timeout (every batch)
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
 
-                document.getElementById('frameCount').textContent = frames.length;
-                
-                // Start displaying
-                startTransfer(fps);
+                    document.getElementById('frameCount').textContent = frames.length;
+                    startBtn.textContent = 'Start Transfer';
+                    startBtn.disabled = false;
+                    
+                    // Start displaying
+                    startTransfer(fps);
+                } catch (error) {
+                    console.error('Encoding error:', error);
+                    alert('Failed to encode file. Try a smaller file or lower error correction.');
+                    startBtn.textContent = 'Start Transfer';
+                    startBtn.disabled = false;
+                }
             };
             reader.readAsText(selectedFile);
         });
