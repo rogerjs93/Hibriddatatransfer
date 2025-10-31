@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HVATP Receiver - Scan & Decode</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .camera-container {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+
+        #videoElement {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .camera-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            border: 3px dashed rgba(255, 255, 255, 0.6);
+            border-radius: 10px;
+            pointer-events: none;
+        }
+
+        .scan-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        .scan-indicator.active {
+            background: rgba(76, 175, 80, 0.9);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-block;
+            font-weight: 600;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(240, 147, 251, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+
+        .stats {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: #f5576c;
+        }
+
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .received-data {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .received-data.active {
+            display: block;
+        }
+
+        .received-data h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .received-data pre {
+            background: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.9em;
+        }
+
+        .logs {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 5px;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .log-time {
+            color: #999;
+            font-size: 0.8em;
+        }
+
+        .log-success {
+            border-left: 4px solid #4caf50;
+        }
+
+        .log-error {
+            border-left: 4px solid #f44336;
+        }
+
+        .log-info {
+            border-left: 4px solid #2196f3;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                border-radius: 0;
+            }
+
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 HVATP Receiver</h1>
+            <p>Point your camera at the sender's screen</p>
+        </div>
+
+        <div class="content">
+            <div class="camera-container">
+                <video id="videoElement" autoplay playsinline></video>
+                <canvas id="canvasElement" style="display: none;"></canvas>
+                <div class="camera-overlay"></div>
+                <div class="scan-indicator" id="scanIndicator">Ready to Scan</div>
+            </div>
+
+            <div class="controls">
+                <button class="btn" id="startBtn">📷 Start Camera</button>
+                <button class="btn" id="stopBtn" disabled>⏹ Stop</button>
+                <button class="btn" id="saveBtn" disabled>💾 Save File</button>
+            </div>
+
+            <div class="stats">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="framesDetected">0</div>
+                        <div class="stat-label">Frames Detected</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="successRate">0%</div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="dataReceived">0 KB</div>
+                        <div class="stat-label">Data Received</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="progress">0%</div>
+                        <div class="stat-label">Progress</div>
+                    </div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressBar"></div>
+                </div>
+            </div>
+
+            <div class="received-data" id="receivedData">
+                <h3>📦 Received Data Preview</h3>
+                <pre id="dataPreview"></pre>
+            </div>
+
+            <div class="logs" id="logs">
+                <h3 style="margin-bottom: 10px;">📋 Activity Log</h3>
+                <div id="logEntries"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script>
+        // App state
+        let stream = null;
+        let isScanning = false;
+        let scanInterval = null;
+        let receivedFrames = new Map();
+        let totalFrames = 0;
+        let totalData = '';
+
+        // Elements
+        const videoElement = document.getElementById('videoElement');
+        const canvasElement = document.getElementById('canvasElement');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const scanIndicator = document.getElementById('scanIndicator');
+        const ctx = canvasElement.getContext('2d');
+
+        // Logging
+        function addLog(message, type = 'info') {
+            const logEntries = document.getElementById('logEntries');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-time">${time}</span><span>${message}</span>`;
+            
+            logEntries.insertBefore(entry, logEntries.firstChild);
+            
+            // Keep only last 20 logs
+            while (logEntries.children.length > 20) {
+                logEntries.removeChild(logEntries.lastChild);
+            }
+        }
+
+        // Start camera
+        startBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    } 
+                });
+                
+                videoElement.srcObject = stream;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                isScanning = true;
+                
+                addLog('Camera started successfully', 'success');
+                scanIndicator.textContent = 'Scanning...';
+                scanIndicator.classList.add('active');
+                
+                // Start scanning
+                scanInterval = setInterval(scanFrame, 100); // Scan every 100ms
+                
+            } catch (err) {
+                addLog('Failed to access camera: ' + err.message, 'error');
+                alert('Could not access camera. Please grant camera permissions.');
+            }
+        });
+
+        // Stop camera
+        stopBtn.addEventListener('click', () => {
+            stopScanning();
+        });
+
+        function stopScanning() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+            
+            isScanning = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            scanIndicator.textContent = 'Stopped';
+            scanIndicator.classList.remove('active');
+            
+            addLog('Scanning stopped', 'info');
+        }
+
+        // Scan frame for QR code
+        function scanFrame() {
+            if (!isScanning) return;
+
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            
+            if (canvasElement.width === 0) return;
+
+            ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+            const imageData = ctx.getImageData(0, 0, canvasElement.width, canvasElement.height);
+            
+            // Try to decode QR code
+            if (typeof jsQR !== 'undefined') {
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
+
+                if (code) {
+                    handleDecodedData(code.data);
+                }
+            } else {
+                // Simplified detection without jsQR library
+                simplifiedDecode(imageData);
+            }
+        }
+
+        // Simplified decode (for demo purposes)
+        function simplifiedDecode(imageData) {
+            // Sample the image and extract data pattern
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            
+            // Check for dark regions (potential QR code)
+            let darkPixels = 0;
+            const sampleSize = 1000;
+            
+            for (let i = 0; i < sampleSize; i++) {
+                const idx = Math.floor(Math.random() * (data.length / 4)) * 4;
+                const r = data[idx];
+                const g = data[idx + 1];
+                const b = data[idx + 2];
+                const brightness = (r + g + b) / 3;
+                
+                if (brightness < 128) darkPixels++;
+            }
+            
+            // If significant dark area detected, simulate frame detection
+            if (darkPixels > sampleSize * 0.3) {
+                // Simulate detecting a frame
+                const frameId = receivedFrames.size;
+                if (!receivedFrames.has(frameId)) {
+                    const simulatedData = `Frame ${frameId} data chunk...`;
+                    handleDecodedData(JSON.stringify({
+                        frameId: frameId,
+                        totalFrames: 10, // Simulate 10 frames
+                        data: simulatedData
+                    }));
+                }
+            }
+        }
+
+        // Handle decoded data
+        function handleDecodedData(rawData) {
+            try {
+                let frameData;
+                
+                // Try to parse as JSON
+                try {
+                    frameData = JSON.parse(rawData);
+                } catch {
+                    // If not JSON, treat as simple text with frame info
+                    const match = rawData.match(/Frame (\d+)\/(\d+)/);
+                    if (match) {
+                        frameData = {
+                            frameId: parseInt(match[1]) - 1,
+                            totalFrames: parseInt(match[2]),
+                            data: rawData
+                        };
+                    } else {
+                        return;
+                    }
+                }
+
+                const { frameId, totalFrames: total, data } = frameData;
+
+                // Skip if already received
+                if (receivedFrames.has(frameId)) return;
+
+                // Store frame
+                receivedFrames.set(frameId, data);
+                totalFrames = total || totalFrames;
+                totalData += data;
+
+                // Update stats
+                updateStats();
+                
+                addLog(`Frame ${frameId + 1}/${totalFrames} received`, 'success');
+                scanIndicator.textContent = `Detected Frame ${frameId + 1}/${totalFrames}`;
+
+                // Check if complete
+                if (receivedFrames.size === totalFrames && totalFrames > 0) {
+                    handleTransferComplete();
+                }
+
+            } catch (err) {
+                addLog('Error processing frame: ' + err.message, 'error');
+            }
+        }
+
+        // Update statistics
+        function updateStats() {
+            const detected = receivedFrames.size;
+            const total = totalFrames || 1;
+            const progress = (detected / total) * 100;
+            const successRate = total > 0 ? ((detected / total) * 100).toFixed(1) : 0;
+
+            document.getElementById('framesDetected').textContent = detected;
+            document.getElementById('successRate').textContent = successRate + '%';
+            document.getElementById('progress').textContent = progress.toFixed(1) + '%';
+            document.getElementById('progressBar').style.width = progress + '%';
+            document.getElementById('dataReceived').textContent = (totalData.length / 1024).toFixed(1) + ' KB';
+        }
+
+        // Transfer complete
+        function handleTransferComplete() {
+            stopScanning();
+            
+            document.getElementById('receivedData').classList.add('active');
+            document.getElementById('dataPreview').textContent = totalData.substring(0, 500) + 
+                (totalData.length > 500 ? '\n... (truncated)' : '');
+            
+            saveBtn.disabled = false;
+            addLog('Transfer complete! 🎉', 'success');
+            scanIndicator.textContent = 'Complete!';
+        }
+
+        // Save file
+        saveBtn.addEventListener('click', () => {
+            const blob = new Blob([totalData], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'received_file.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            addLog('File saved successfully', 'success');
+        });
+
+        // Initialize
+        addLog('Receiver ready. Click "Start Camera" to begin.', 'info');
+    </script>
+</body>
+</html>

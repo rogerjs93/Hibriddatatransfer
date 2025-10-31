@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HVATP Sender - File Transfer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .upload-section {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-section:hover {
+            background: #f8f9ff;
+            border-color: #764ba2;
+        }
+
+        .upload-section.dragover {
+            background: #f0f2ff;
+            border-color: #764ba2;
+            transform: scale(1.02);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+
+        .settings {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .setting-group {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .setting-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .setting-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+
+        .setting-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-block;
+            font-weight: 600;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .display-area {
+            background: #000;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 30px;
+            display: none;
+            position: relative;
+        }
+
+        .display-area.active {
+            display: block;
+        }
+
+        #qrDisplay {
+            width: 100%;
+            height: auto;
+            max-width: 600px;
+            margin: 0 auto;
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        .stats {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .stats.active {
+            display: block;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                border-radius: 0;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .settings {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📡 HVATP Sender</h1>
+            <p>Hybrid Visual + Audio Transfer Protocol</p>
+        </div>
+
+        <div class="content">
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-icon">📁</div>
+                <h2>Drop your file here or click to browse</h2>
+                <p>Any file type supported</p>
+                <input type="file" id="fileInput">
+            </div>
+
+            <div class="settings">
+                <div class="setting-group">
+                    <label for="encodingMode">Encoding Mode</label>
+                    <select id="encodingMode">
+                        <option value="HIGH_DENSITY">High Density (8 colors)</option>
+                        <option value="BALANCED" selected>Balanced (4 colors)</option>
+                        <option value="ROBUST">Robust (B&W)</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="errorCorrection">Error Correction</label>
+                    <select id="errorCorrection">
+                        <option value="0.25">Low (25%)</option>
+                        <option value="0.35" selected>Medium (35%)</option>
+                        <option value="0.50">High (50%)</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="frameRate">Frame Rate</label>
+                    <select id="frameRate">
+                        <option value="15">15 fps (Slow)</option>
+                        <option value="30" selected>30 fps (Normal)</option>
+                        <option value="60">60 fps (Fast)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="text-align: center;">
+                <button class="btn" id="startBtn" disabled>Start Transfer</button>
+            </div>
+
+            <div class="stats" id="stats">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="frameCount">0</div>
+                        <div class="stat-label">Frames</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="fileSize">0 KB</div>
+                        <div class="stat-label">File Size</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="throughput">0 KB/s</div>
+                        <div class="stat-label">Throughput</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="progress">0%</div>
+                        <div class="stat-label">Progress</div>
+                    </div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressBar"></div>
+                </div>
+            </div>
+
+            <div class="display-area" id="displayArea">
+                <canvas id="qrDisplay"></canvas>
+                <div class="controls">
+                    <button class="btn" id="pauseBtn">⏸ Pause</button>
+                    <button class="btn" id="stopBtn">⏹ Stop</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple QR-like encoder (simplified version)
+        class SimpleVisualEncoder {
+            constructor(mode = 'BALANCED', eccLevel = 0.35) {
+                this.mode = mode;
+                this.eccLevel = eccLevel;
+                this.moduleCount = 150; // Smaller for web demo
+                this.colors = this.getColorPalette();
+            }
+
+            getColorPalette() {
+                const palettes = {
+                    'HIGH_DENSITY': ['#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'],
+                    'BALANCED': ['#000000', '#FFFFFF', '#FF0000', '#0000FF'],
+                    'ROBUST': ['#000000', '#FFFFFF']
+                };
+                return palettes[this.mode];
+            }
+
+            encodeFrame(data, frameId, totalFrames) {
+                const canvas = document.createElement('canvas');
+                const moduleSize = 4;
+                canvas.width = this.moduleCount * moduleSize;
+                canvas.height = this.moduleCount * moduleSize;
+                const ctx = canvas.getContext('2d');
+
+                // Fill with pattern based on data
+                for (let y = 0; y < this.moduleCount; y++) {
+                    for (let x = 0; x < this.moduleCount; x++) {
+                        const index = (y * this.moduleCount + x) % data.length;
+                        const byte = data.charCodeAt(index);
+                        const colorIndex = byte % this.colors.length;
+                        
+                        ctx.fillStyle = this.colors[colorIndex];
+                        ctx.fillRect(x * moduleSize, y * moduleSize, moduleSize, moduleSize);
+                    }
+                }
+
+                // Add finder patterns
+                this.addFinderPatterns(ctx, moduleSize);
+
+                // Add frame info
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '16px monospace';
+                ctx.fillText(`Frame ${frameId + 1}/${totalFrames}`, 10, canvas.height - 10);
+
+                return canvas;
+            }
+
+            addFinderPatterns(ctx, moduleSize) {
+                const patternSize = 10 * moduleSize;
+                const positions = [
+                    [0, 0],
+                    [this.moduleCount * moduleSize - patternSize, 0],
+                    [0, this.moduleCount * moduleSize - patternSize]
+                ];
+
+                positions.forEach(([x, y]) => {
+                    // Outer square
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(x, y, patternSize, patternSize);
+                    
+                    // Inner square
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(x + moduleSize * 2, y + moduleSize * 2, patternSize - moduleSize * 4, patternSize - moduleSize * 4);
+                    
+                    // Center
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(x + moduleSize * 4, y + moduleSize * 4, moduleSize * 2, moduleSize * 2);
+                });
+            }
+        }
+
+        // App state
+        let selectedFile = null;
+        let isTransferring = false;
+        let isPaused = false;
+        let currentFrame = 0;
+        let frames = [];
+        let transferInterval = null;
+        let startTime = null;
+
+        // Elements
+        const uploadSection = document.getElementById('uploadSection');
+        const fileInput = document.getElementById('fileInput');
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const displayArea = document.getElementById('displayArea');
+        const qrDisplay = document.getElementById('qrDisplay');
+        const stats = document.getElementById('stats');
+
+        // File selection
+        uploadSection.addEventListener('click', () => fileInput.click());
+        
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFileSelect(file);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) handleFileSelect(file);
+        });
+
+        function handleFileSelect(file) {
+            selectedFile = file;
+            startBtn.disabled = false;
+            uploadSection.querySelector('h2').textContent = `✓ ${file.name} (${formatFileSize(file.size)})`;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Start transfer
+        startBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            const mode = document.getElementById('encodingMode').value;
+            const ecc = parseFloat(document.getElementById('errorCorrection').value);
+            const fps = parseInt(document.getElementById('frameRate').value);
+
+            // Read file
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const data = e.target.result;
+                
+                // Encode frames
+                const encoder = new SimpleVisualEncoder(mode, ecc);
+                const chunkSize = 500; // bytes per frame
+                const totalFrames = Math.ceil(data.length / chunkSize);
+                
+                frames = [];
+                for (let i = 0; i < totalFrames; i++) {
+                    const chunk = data.substr(i * chunkSize, chunkSize);
+                    const canvas = encoder.encodeFrame(chunk, i, totalFrames);
+                    frames.push(canvas);
+                }
+
+                document.getElementById('frameCount').textContent = frames.length;
+                
+                // Start displaying
+                startTransfer(fps);
+            };
+            reader.readAsText(selectedFile);
+        });
+
+        function startTransfer(fps) {
+            isTransferring = true;
+            isPaused = false;
+            currentFrame = 0;
+            startTime = Date.now();
+
+            displayArea.classList.add('active');
+            stats.classList.add('active');
+            startBtn.disabled = true;
+
+            const interval = 1000 / fps;
+            transferInterval = setInterval(() => {
+                if (!isPaused && currentFrame < frames.length) {
+                    displayFrame(frames[currentFrame]);
+                    currentFrame++;
+                    updateStats();
+                } else if (currentFrame >= frames.length) {
+                    stopTransfer();
+                }
+            }, interval);
+        }
+
+        function displayFrame(canvas) {
+            const ctx = qrDisplay.getContext('2d');
+            qrDisplay.width = canvas.width;
+            qrDisplay.height = canvas.height;
+            ctx.drawImage(canvas, 0, 0);
+        }
+
+        function updateStats() {
+            const elapsed = (Date.now() - startTime) / 1000;
+            const progress = (currentFrame / frames.length) * 100;
+            const throughput = (selectedFile.size / elapsed) / 1024;
+
+            document.getElementById('progress').textContent = progress.toFixed(1) + '%';
+            document.getElementById('progressBar').style.width = progress + '%';
+            document.getElementById('throughput').textContent = throughput.toFixed(1) + ' KB/s';
+        }
+
+        pauseBtn.addEventListener('click', () => {
+            isPaused = !isPaused;
+            pauseBtn.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+        });
+
+        stopBtn.addEventListener('click', stopTransfer);
+
+        function stopTransfer() {
+            if (transferInterval) {
+                clearInterval(transferInterval);
+                transferInterval = null;
+            }
+            isTransferring = false;
+            startBtn.disabled = false;
+            pauseBtn.textContent = '⏸ Pause';
+        }
+    </script>
+</body>
+</html>
