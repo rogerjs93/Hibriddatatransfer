@@ -524,6 +524,7 @@
         // App state
         let stream = null;
         let isScanning = false;
+        let isReceiving = false; // NEW: Only true after detecting start signal
         let scanInterval = null;
         let receivedFrames = new Map();
         let frameHashes = new Set(); // Track unique frames by hash
@@ -532,6 +533,7 @@
         let decoder = new SimpleVisualDecoder();
         let lastDetectionTime = 0;
         let detectionCooldown = 200; // ms between frame captures
+        let startSignalDetected = false;
 
         // Elements
         const videoElement = document.getElementById('videoElement');
@@ -627,10 +629,13 @@
             }
             
             isScanning = false;
+            isReceiving = false;
+            startSignalDetected = false;
             startBtn.disabled = false;
             stopBtn.disabled = true;
             scanIndicator.textContent = 'Stopped';
             scanIndicator.classList.remove('active');
+            scanIndicator.style.background = '';
             
             addLog('Scanning stopped', 'info');
         }
@@ -650,6 +655,7 @@
                 
                 // Listen for audio beeps
                 let lastBeepTime = 0;
+                let beepSequence = [];
                 
                 function detectBeeps() {
                     if (!isScanning) return;
@@ -663,15 +669,44 @@
                     const binRange = 10; // Check ±10 bins
                     
                     let maxAmplitude = 0;
+                    let peakFrequency = 0;
                     for (let i = Math.max(0, targetBin - binRange); i < Math.min(bufferLength, targetBin + binRange); i++) {
-                        maxAmplitude = Math.max(maxAmplitude, dataArray[i]);
+                        if (dataArray[i] > maxAmplitude) {
+                            maxAmplitude = dataArray[i];
+                            peakFrequency = (i * audioContext.sampleRate) / analyser.fftSize;
+                        }
                     }
                     
                     // Detect beep (threshold: 150/255)
                     if (maxAmplitude > 150) {
                         const now = Date.now();
                         if (now - lastBeepTime > 50) { // Debounce 50ms
-                            addLog(`🔊 Audio sync detected (${maxAmplitude})`, 'info');
+                            beepSequence.push({ freq: peakFrequency, time: now });
+                            
+                            // Keep only recent beeps (last 2 seconds)
+                            beepSequence = beepSequence.filter(b => now - b.time < 2000);
+                            
+                            // Detect triple beep pattern (metadata announcement)
+                            if (beepSequence.length >= 3 && !startSignalDetected) {
+                                const lastThree = beepSequence.slice(-3);
+                                const timeDiff1 = lastThree[1].time - lastThree[0].time;
+                                const timeDiff2 = lastThree[2].time - lastThree[1].time;
+                                
+                                // Check if beeps are evenly spaced (~150ms apart)
+                                if (timeDiff1 > 100 && timeDiff1 < 200 && timeDiff2 > 100 && timeDiff2 < 200) {
+                                    startSignalDetected = true;
+                                    isReceiving = true;
+                                    addLog('🎵 START SIGNAL DETECTED - Transfer beginning!', 'success');
+                                    scanIndicator.textContent = 'Transfer Started - Capturing...';
+                                    scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
+                                }
+                            }
+                            
+                            // Log regular sync beeps
+                            if (startSignalDetected) {
+                                addLog(`🔊 Sync beep (${Math.round(peakFrequency)} Hz)`, 'info');
+                            }
+                            
                             lastBeepTime = now;
                         }
                     }
@@ -707,6 +742,21 @@
             const decoded = decoder.decodeFrame(imageData);
             
             if (decoded && decoded.detected) {
+                // If audio not enabled, start receiving on first frame detection
+                if (!document.getElementById('enableAudio').checked && !isReceiving) {
+                    isReceiving = true;
+                    startSignalDetected = true;
+                    addLog('👁️ VISUAL FRAME DETECTED - Transfer starting!', 'success');
+                    scanIndicator.textContent = 'Transfer Started - Capturing...';
+                    scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
+                }
+                
+                // Only capture frames after start signal (or first visual detection)
+                if (!isReceiving) {
+                    scanIndicator.textContent = 'Waiting for start signal...';
+                    return;
+                }
+                
                 lastDetectionTime = now;
                 
                 // Check if this is a new frame (by hash)
