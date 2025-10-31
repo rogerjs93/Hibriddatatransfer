@@ -366,11 +366,20 @@
 
             // Extract frame information
             extractFrameInfo(imageData, moduleSize) {
-                // Sample the bottom area for frame text
                 const { data, width, height } = imageData;
                 
-                // Simple approach: just detect that it's a valid frame
-                // and extract a sequence number based on visual variance
+                // Try to extract frame text from bottom of image
+                let frameId = -1;
+                let totalFrames = -1;
+                let dataLength = -1;
+                
+                // Sample bottom area for white text
+                const textY = height - 20;
+                const textStartX = 10;
+                const textEndX = 200;
+                
+                // Simple OCR-like detection (look for white pixels in text area)
+                // This is simplified - just generate hash for uniqueness
                 let hash = 0;
                 const sampleCount = 100;
                 
@@ -388,7 +397,10 @@
                 return {
                     detected: true,
                     hash: Math.abs(hash),
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    frameId: frameId,
+                    totalFrames: totalFrames,
+                    dataLength: dataLength
                 };
             }
 
@@ -411,9 +423,15 @@
 
             extractModuleData(imageData, moduleSize) {
                 const { data, width, height } = imageData;
-                let extractedData = '';
                 
-                // Sample modules and extract character data
+                // Get color palette based on mode detection
+                const palette = this.detectPaletteMode(data, width, height, moduleSize);
+                const colorPalette = this.colorPalettes[palette];
+                const bitsPerModule = Math.log2(colorPalette.length);
+                
+                let bitString = '';
+                
+                // Sample modules and extract color indices
                 const modules = Math.floor(Math.min(width, height) / moduleSize);
                 
                 for (let y = 0; y < modules && y < this.moduleCount; y++) {
@@ -428,17 +446,78 @@
                         const g = data[idx + 1];
                         const b = data[idx + 2];
                         
-                        // Convert color to character
-                        const colorValue = (r + g * 2 + b * 3) % 256;
-                        const char = String.fromCharCode(32 + (colorValue % 95)); // Printable ASCII
-                        extractedData += char;
+                        // Match to nearest color in palette
+                        const colorIndex = this.findNearestColor(r, g, b, colorPalette);
                         
-                        if (extractedData.length >= 300) break; // Match chunk size
+                        // Convert color index to bits
+                        const bits = colorIndex.toString(2).padStart(Math.floor(bitsPerModule), '0');
+                        bitString += bits;
                     }
-                    if (extractedData.length >= 300) break;
+                }
+                
+                // Convert bits back to characters
+                let extractedData = '';
+                for (let i = 0; i < bitString.length; i += 8) {
+                    const byte = bitString.substr(i, 8);
+                    if (byte.length === 8) {
+                        const charCode = parseInt(byte, 2);
+                        if (charCode > 0 && charCode < 128) { // Valid ASCII
+                            extractedData += String.fromCharCode(charCode);
+                        }
+                    }
+                }
+                
+                // Trim to reasonable length
+                if (extractedData.length > 300) {
+                    extractedData = extractedData.substring(0, 300);
                 }
                 
                 return extractedData;
+            }
+
+            detectPaletteMode(data, width, height, moduleSize) {
+                // Sample some modules and count unique colors
+                const colors = new Set();
+                const samples = 20;
+                
+                for (let i = 0; i < samples; i++) {
+                    const x = Math.floor(Math.random() * (width / moduleSize)) * moduleSize;
+                    const y = Math.floor(Math.random() * (height / moduleSize)) * moduleSize;
+                    const idx = (y * width + x) * 4;
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    colors.add(`${r},${g},${b}`);
+                }
+                
+                // Determine mode based on color count
+                if (colors.size >= 7) return 'HIGH_DENSITY';
+                if (colors.size >= 3) return 'BALANCED';
+                return 'ROBUST';
+            }
+
+            findNearestColor(r, g, b, palette) {
+                let minDist = Infinity;
+                let nearestIndex = 0;
+                
+                palette.forEach((color, index) => {
+                    const cr = parseInt(color.substr(1, 2), 16);
+                    const cg = parseInt(color.substr(3, 2), 16);
+                    const cb = parseInt(color.substr(5, 2), 16);
+                    
+                    const dist = Math.sqrt(
+                        Math.pow(r - cr, 2) +
+                        Math.pow(g - cg, 2) +
+                        Math.pow(b - cb, 2)
+                    );
+                    
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestIndex = index;
+                    }
+                });
+                
+                return nearestIndex;
             }
         }
 
@@ -649,15 +728,23 @@
         // Update statistics
         function updateStats() {
             const detected = receivedFrames.size;
-            const total = totalFrames || 1;
-            const progress = (detected / total) * 100;
+            const total = totalFrames || detected; // Use detected count if total unknown
+            const progress = total > 0 ? (detected / total) * 100 : 0;
             const successRate = total > 0 ? ((detected / total) * 100).toFixed(1) : 0;
 
             document.getElementById('framesDetected').textContent = detected;
             document.getElementById('successRate').textContent = successRate + '%';
             document.getElementById('progress').textContent = progress.toFixed(1) + '%';
-            document.getElementById('progressBar').style.width = progress + '%';
+            document.getElementById('progressBar').style.width = Math.min(progress, 100) + '%';
             document.getElementById('dataReceived').textContent = (totalData.length / 1024).toFixed(1) + ' KB';
+            
+            // Enable save button if we have any data
+            if (totalData.length > 0) {
+                saveBtn.disabled = false;
+                document.getElementById('receivedData').classList.add('active');
+                document.getElementById('dataPreview').textContent = totalData.substring(0, 500) + 
+                    (totalData.length > 500 ? '\n... (truncated)' : '');
+            }
         }
 
         // Transfer complete

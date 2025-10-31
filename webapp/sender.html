@@ -359,13 +359,33 @@
                     return [r, g, b];
                 });
 
-                // Fill with pattern based on data (optimized)
-                let dataIdx = 0;
+                // Calculate bits per module based on color count
+                const bitsPerModule = Math.log2(this.colors.length);
+                const modulesNeeded = Math.ceil((data.length * 8) / bitsPerModule);
+
+                // Convert data to bits
+                let bitString = '';
+                for (let i = 0; i < data.length; i++) {
+                    const byte = data.charCodeAt(i);
+                    bitString += byte.toString(2).padStart(8, '0');
+                }
+
+                // Fill with pattern based on data (proper bit encoding)
+                let bitIdx = 0;
+                let moduleIdx = 0;
+                
                 for (let y = 0; y < this.moduleCount; y++) {
                     for (let x = 0; x < this.moduleCount; x++) {
-                        const byte = data.charCodeAt(dataIdx % data.length);
-                        const colorIndex = byte % this.colors.length;
-                        const [r, g, b] = colorRGB[colorIndex];
+                        let colorIndex = 0;
+                        
+                        if (bitIdx < bitString.length) {
+                            // Extract bits for this module
+                            const bits = bitString.substr(bitIdx, Math.floor(bitsPerModule));
+                            colorIndex = parseInt(bits.padEnd(Math.floor(bitsPerModule), '0'), 2);
+                            bitIdx += Math.floor(bitsPerModule);
+                        }
+                        
+                        const [r, g, b] = colorRGB[colorIndex % this.colors.length];
                         
                         // Fill module (moduleSize x moduleSize block)
                         for (let dy = 0; dy < moduleSize; dy++) {
@@ -380,7 +400,7 @@
                                 pixels[pixelIndex + 3] = 255; // Alpha
                             }
                         }
-                        dataIdx++;
+                        moduleIdx++;
                     }
                 }
 
@@ -390,10 +410,10 @@
                 // Add finder patterns (after pixel data)
                 this.addFinderPatterns(ctx, moduleSize);
 
-                // Add frame info
+                // Add frame info with metadata
                 ctx.fillStyle = '#FFFFFF';
-                ctx.font = '16px monospace';
-                ctx.fillText(`Frame ${frameId + 1}/${totalFrames}`, 10, canvas.height - 10);
+                ctx.font = 'bold 14px monospace';
+                ctx.fillText(`F:${frameId}/${totalFrames} L:${data.length}`, 10, canvas.height - 10);
 
                 return canvas;
             }
