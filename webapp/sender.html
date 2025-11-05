@@ -159,7 +159,11 @@
             max-height: 80vh;
             margin: 0 auto;
             display: block;
+            /* Prevent blurriness on scaled images */
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: -moz-crisp-edges;
             image-rendering: pixelated;
+            -ms-interpolation-mode: nearest-neighbor;
             object-fit: contain;
         }
 
@@ -365,10 +369,10 @@
                 const bitsPerModule = Math.log2(this.colors.length);
                 const modulesNeeded = Math.ceil((data.length * 8) / bitsPerModule);
 
-                // Convert data to bits
+                // Convert data to bits (works with Uint8Array or string)
                 let bitString = '';
                 for (let i = 0; i < data.length; i++) {
-                    const byte = data.charCodeAt(i);
+                    const byte = data[i]; // Direct byte access for Uint8Array
                     bitString += byte.toString(2).padStart(8, '0');
                 }
 
@@ -626,12 +630,14 @@
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
-                    const data = e.target.result;
+                    // Convert ArrayBuffer to Uint8Array for proper binary handling
+                    const arrayBuffer = e.target.result;
+                    const uint8Array = new Uint8Array(arrayBuffer);
                     
                     // Encode frames with chunked processing to prevent timeout
                     const encoder = new SimpleVisualEncoder(mode, ecc);
                     const chunkSize = 300; // Reduced from 500 for faster encoding
-                    const totalFrames = Math.ceil(data.length / chunkSize);
+                    const totalFrames = Math.ceil(uint8Array.length / chunkSize);
                     
                     frames = [];
                     
@@ -642,7 +648,9 @@
                         
                         // Process batch
                         for (let j = i; j < batchEnd; j++) {
-                            const chunk = data.substr(j * chunkSize, chunkSize);
+                            const start = j * chunkSize;
+                            const end = Math.min(start + chunkSize, uint8Array.length);
+                            const chunk = uint8Array.slice(start, end);
                             const canvas = encoder.encodeFrame(chunk, j, totalFrames);
                             frames.push(canvas);
                         }
@@ -676,7 +684,7 @@
                     startBtn.disabled = false;
                 }
             };
-            reader.readAsText(selectedFile);
+            reader.readAsArrayBuffer(selectedFile); // Use ArrayBuffer for binary files
         });
 
         function startTransfer(fps) {

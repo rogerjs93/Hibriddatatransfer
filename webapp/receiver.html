@@ -456,24 +456,22 @@
                     }
                 }
                 
-                // Convert bits back to characters
-                let extractedData = '';
+                // Convert bits back to bytes (NO ASCII FILTERING - keep all bytes 0-255)
+                let extractedBytes = [];
                 for (let i = 0; i < bitString.length; i += 8) {
                     const byte = bitString.substr(i, 8);
                     if (byte.length === 8) {
-                        const charCode = parseInt(byte, 2);
-                        if (charCode > 0 && charCode < 128) { // Valid ASCII
-                            extractedData += String.fromCharCode(charCode);
-                        }
+                        const byteValue = parseInt(byte, 2);
+                        extractedBytes.push(byteValue); // Store all bytes, not just ASCII
                     }
                 }
                 
-                // Trim to reasonable length
-                if (extractedData.length > 300) {
-                    extractedData = extractedData.substring(0, 300);
+                // Trim to reasonable length (300 bytes per frame)
+                if (extractedBytes.length > 300) {
+                    extractedBytes = extractedBytes.slice(0, 300);
                 }
                 
-                return extractedData;
+                return extractedBytes; // Return byte array instead of string
             }
 
             detectPaletteMode(data, width, height, moduleSize) {
@@ -530,7 +528,7 @@
         let receivedFrames = new Map();
         let frameHashes = new Set(); // Track unique frames by hash
         let totalFrames = 0;
-        let totalData = '';
+        let totalDataBytes = []; // Changed from string to byte array
         let decoder = new SimpleVisualDecoder();
         let lastDetectionTime = 0;
         let detectionCooldown = 200; // ms between frame captures
@@ -620,6 +618,11 @@
         // Manual start receiving button
         startReceivingBtn.addEventListener('click', () => {
             if (!isReceiving && isScanning) {
+                // Reset data collection
+                receivedFrames.clear();
+                frameHashes.clear();
+                totalDataBytes = [];
+                
                 isReceiving = true;
                 startSignalDetected = true;
                 startReceivingBtn.disabled = true;
@@ -712,6 +715,11 @@
                                 
                                 // Check if beeps are evenly spaced (~150ms apart)
                                 if (timeDiff1 > 100 && timeDiff1 < 200 && timeDiff2 > 100 && timeDiff2 < 200) {
+                                    // Reset data collection
+                                    receivedFrames.clear();
+                                    frameHashes.clear();
+                                    totalDataBytes = [];
+                                    
                                     startSignalDetected = true;
                                     isReceiving = true;
                                     startReceivingBtn.disabled = true; // Disable manual button
@@ -780,7 +788,7 @@
                     
                     const frameId = receivedFrames.size;
                     receivedFrames.set(frameId, decoded.data);
-                    totalData += decoded.data;
+                    totalDataBytes.push(...decoded.data); // Append bytes to array
                     
                     addLog(`✓ Frame ${frameId + 1} captured (${decoded.data.length} bytes)`, 'success');
                     scanIndicator.textContent = `Captured ${frameId + 1} frames`;
@@ -801,14 +809,26 @@
             document.getElementById('successRate').textContent = successRate + '%';
             document.getElementById('progress').textContent = progress.toFixed(1) + '%';
             document.getElementById('progressBar').style.width = Math.min(progress, 100) + '%';
-            document.getElementById('dataReceived').textContent = (totalData.length / 1024).toFixed(1) + ' KB';
+            document.getElementById('dataReceived').textContent = (totalDataBytes.length / 1024).toFixed(1) + ' KB';
             
             // Enable save button if we have any data
-            if (totalData.length > 0) {
+            if (totalDataBytes.length > 0) {
                 saveBtn.disabled = false;
                 document.getElementById('receivedData').classList.add('active');
-                document.getElementById('dataPreview').textContent = totalData.substring(0, 500) + 
-                    (totalData.length > 500 ? '\n... (truncated)' : '');
+                
+                // Show preview (convert bytes to text for display, with fallback for binary)
+                const previewBytes = totalDataBytes.slice(0, 500);
+                let preview = '';
+                try {
+                    // Try to decode as UTF-8 text
+                    const decoder = new TextDecoder('utf-8', { fatal: true });
+                    preview = decoder.decode(new Uint8Array(previewBytes));
+                } catch (e) {
+                    // Binary data - show hex preview
+                    preview = 'Binary data (hex): ' + previewBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+                }
+                document.getElementById('dataPreview').textContent = preview + 
+                    (totalDataBytes.length > 500 ? '\n... (truncated)' : '');
             }
         }
 
@@ -817,8 +837,20 @@
             stopScanning();
             
             document.getElementById('receivedData').classList.add('active');
-            document.getElementById('dataPreview').textContent = totalData.substring(0, 500) + 
-                (totalData.length > 500 ? '\n... (truncated)' : '');
+            
+            // Show preview (convert bytes to text for display, with fallback for binary)
+            const previewBytes = totalDataBytes.slice(0, 500);
+            let preview = '';
+            try {
+                // Try to decode as UTF-8 text
+                const decoder = new TextDecoder('utf-8', { fatal: true });
+                preview = decoder.decode(new Uint8Array(previewBytes));
+            } catch (e) {
+                // Binary data - show hex preview
+                preview = 'Binary data (hex): ' + previewBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+            }
+            document.getElementById('dataPreview').textContent = preview + 
+                (totalDataBytes.length > 500 ? '\n... (truncated)' : '');
             
             saveBtn.disabled = false;
             addLog('Transfer complete! 🎉', 'success');
@@ -827,15 +859,17 @@
 
         // Save file
         saveBtn.addEventListener('click', () => {
-            const blob = new Blob([totalData], { type: 'text/plain' });
+            // Convert byte array to Uint8Array and create binary blob
+            const uint8Array = new Uint8Array(totalDataBytes);
+            const blob = new Blob([uint8Array], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'received_file.txt';
+            a.download = 'received_file.bin'; // Generic binary extension
             a.click();
             URL.revokeObjectURL(url);
             
-            addLog('File saved successfully', 'success');
+            addLog(`File saved successfully (${totalDataBytes.length} bytes)`, 'success');
         });
 
         // Initialize
