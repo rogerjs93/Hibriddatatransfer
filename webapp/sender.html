@@ -918,6 +918,7 @@
             // AFTER setting size, check what the browser actually rendered
             const actualRect = qrDisplay.getBoundingClientRect();
             console.log(`🔍 Actual canvas element: ${Math.floor(actualRect.width)}x${Math.floor(actualRect.height)} | CSS: ${qrDisplay.style.width} x ${qrDisplay.style.height}`);
+            console.log(`🎨 Source canvas: ${canvas.width}x${canvas.height}, Target canvas: ${qrDisplay.width}x${qrDisplay.height}`);
             
             // Fill with white background
             ctx.fillStyle = '#FFFFFF';
@@ -929,6 +930,8 @@
             ctx.mozImageSmoothingEnabled = false;
             ctx.msImageSmoothingEnabled = false;
             ctx.drawImage(canvas, 0, 0, scaledWidth, scaledHeight);
+            
+            console.log(`✅ Drew image from (0,0,${canvas.width},${canvas.height}) to (0,0,${scaledWidth},${scaledHeight})`);
         }
 
         function updateStats() {
