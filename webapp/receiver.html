@@ -637,11 +637,12 @@
 
         // Stop camera
         stopBtn.addEventListener('click', () => {
-            // Reassemble data before stopping
+            // Reassemble and show data before stopping
             if (receivedFrames.size > 0) {
-                reassembleData();
+                handleTransferComplete();
+            } else {
+                stopScanning();
             }
-            stopScanning();
         });
 
         function stopScanning() {
@@ -982,10 +983,7 @@
                 scanIndicator.textContent = `Complete! ${receivedCount} frames`;
                 scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
                 
-                // Reassemble data in correct order
-                reassembleData();
-                
-                // Auto-stop receiving
+                // Auto-stop receiving (reassembly happens in handleTransferComplete)
                 setTimeout(() => {
                     handleTransferComplete();
                 }, 1000); // Small delay to show completion message
@@ -1019,27 +1017,11 @@
             // Enable save button if we have any data
             if (totalBytes > 0) {
                 saveBtn.disabled = false;
-                
-                // Reassemble data for preview
-                if (receivedFrames.size > 0) {
-                    reassembleData();
-                }
-                
                 document.getElementById('receivedData').classList.add('active');
                 
-                // Show preview (convert bytes to text for display, with fallback for binary)
-                const previewBytes = totalDataBytes.slice(0, 500);
-                let preview = '';
-                try {
-                    // Try to decode as UTF-8 text
-                    const decoder = new TextDecoder('utf-8', { fatal: true });
-                    preview = decoder.decode(new Uint8Array(previewBytes));
-                } catch (e) {
-                    // Binary data - show hex preview
-                    preview = 'Binary data (hex): ' + previewBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
-                }
-                document.getElementById('dataPreview').textContent = preview + 
-                    (totalDataBytes.length > 500 ? '\n... (truncated)' : '');
+                // Show simple frame count preview (don't reassemble until complete)
+                const preview = `Receiving data...\n${detected} frames captured\n${(totalBytes / 1024).toFixed(2)} KB received`;
+                document.getElementById('dataPreview').textContent = preview;
             }
         }
 
@@ -1047,9 +1029,12 @@
         function handleTransferComplete() {
             stopScanning();
             
+            // CRITICAL: Reassemble data in correct order first
+            reassembleData();
+            
             document.getElementById('receivedData').classList.add('active');
             
-            // Detect file type
+            // Detect file type from reassembled data
             const fileType = detectFileType(totalDataBytes);
             
             // Show preview based on file type
