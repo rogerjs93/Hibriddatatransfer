@@ -288,6 +288,13 @@
                         Enable Audio Channel (Sync + Metadata)
                     </label>
                 </div>
+
+                <div class="setting-group">
+                    <label for="loopMode">
+                        <input type="checkbox" id="loopMode" checked style="width: auto; margin-right: 10px;">
+                        Loop Mode (Repeat frames continuously)
+                    </label>
+                </div>
             </div>
 
             <div style="text-align: center;">
@@ -311,6 +318,10 @@
                     <div class="stat-item">
                         <div class="stat-value" id="progress">0%</div>
                         <div class="stat-label">Progress</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="loopCounter">0</div>
+                        <div class="stat-label">Loops</div>
                     </div>
                 </div>
                 <div class="progress-bar">
@@ -544,6 +555,7 @@
         let transferInterval = null;
         let startTime = null;
         let audioEncoder = null;
+        let loopCount = 0; // Track number of complete loops
 
         // Elements
         const uploadSection = document.getElementById('uploadSection');
@@ -555,6 +567,7 @@
         const qrDisplay = document.getElementById('qrDisplay');
         const stats = document.getElementById('stats');
         const audioChannelCheckbox = document.getElementById('audioChannel');
+        const loopModeCheckbox = document.getElementById('loopMode');
 
         // File selection
         uploadSection.addEventListener('click', () => fileInput.click());
@@ -692,6 +705,7 @@
             isTransferring = true;
             isPaused = false;
             currentFrame = 0;
+            loopCount = 0; // Reset loop counter
             startTime = Date.now();
 
             displayArea.classList.add('active');
@@ -699,6 +713,8 @@
             startBtn.disabled = true;
 
             const interval = 1000 / fps;
+            const loopEnabled = loopModeCheckbox.checked;
+            
             transferInterval = setInterval(() => {
                 if (!isPaused && currentFrame < frames.length) {
                     displayFrame(frames[currentFrame]);
@@ -711,7 +727,15 @@
                     currentFrame++;
                     updateStats();
                 } else if (currentFrame >= frames.length) {
-                    stopTransfer();
+                    if (loopEnabled) {
+                        // Loop mode: restart from beginning
+                        currentFrame = 0;
+                        loopCount++;
+                        console.log(`🔄 Loop ${loopCount} completed - restarting transfer`);
+                    } else {
+                        // Single-shot mode: stop transfer
+                        stopTransfer();
+                    }
                 }
             }, interval);
         }
@@ -749,6 +773,7 @@
             document.getElementById('progress').textContent = progress.toFixed(1) + '%';
             document.getElementById('progressBar').style.width = progress + '%';
             document.getElementById('throughput').textContent = throughput.toFixed(1) + ' KB/s';
+            document.getElementById('loopCounter').textContent = loopCount;
         }
 
         pauseBtn.addEventListener('click', () => {
