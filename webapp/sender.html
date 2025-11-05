@@ -458,6 +458,139 @@
                     ctx.fillRect(x + moduleSize * 4, y + moduleSize * 4, moduleSize * 2, moduleSize * 2);
                 });
             }
+
+            // Helper method to encode binary data to canvas (used by control frames)
+            encodeDataToCanvas(binaryString, isControlFrame = false) {
+                const canvas = document.createElement('canvas');
+                const moduleSize = 4;
+                canvas.width = this.moduleCount * moduleSize;
+                canvas.height = this.moduleCount * moduleSize;
+                const ctx = canvas.getContext('2d');
+
+                // White background
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Use ImageData for pixel manipulation
+                const imageData = ctx.createImageData(canvas.width, canvas.height);
+                const pixels = imageData.data;
+
+                // Pre-convert colors to RGB
+                const colorRGB = this.colors.map(c => {
+                    const r = parseInt(c.substr(1, 2), 16);
+                    const g = parseInt(c.substr(3, 2), 16);
+                    const b = parseInt(c.substr(5, 2), 16);
+                    return [r, g, b];
+                });
+
+                const bitsPerModule = Math.log2(this.colors.length);
+                let bitIdx = 0;
+                
+                for (let y = 0; y < this.moduleCount; y++) {
+                    for (let x = 0; x < this.moduleCount; x++) {
+                        let colorIndex = 0;
+                        
+                        if (bitIdx < binaryString.length) {
+                            const bits = binaryString.substr(bitIdx, Math.floor(bitsPerModule));
+                            colorIndex = parseInt(bits.padEnd(Math.floor(bitsPerModule), '0'), 2);
+                            bitIdx += Math.floor(bitsPerModule);
+                        }
+                        
+                        const [r, g, b] = colorRGB[colorIndex % this.colors.length];
+                        
+                        for (let dy = 0; dy < moduleSize; dy++) {
+                            for (let dx = 0; dx < moduleSize; dx++) {
+                                const pixelX = x * moduleSize + dx;
+                                const pixelY = y * moduleSize + dy;
+                                const pixelIndex = (pixelY * canvas.width + pixelX) * 4;
+                                
+                                pixels[pixelIndex] = r;
+                                pixels[pixelIndex + 1] = g;
+                                pixels[pixelIndex + 2] = b;
+                                pixels[pixelIndex + 3] = 255;
+                            }
+                        }
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+                this.addFinderPatterns(ctx, moduleSize);
+
+                // Add red corner marker for control frames
+                if (isControlFrame) {
+                    ctx.fillStyle = '#FF0000';
+                    ctx.fillRect(canvas.width - 12, canvas.height - 12, 12, 12);
+                }
+
+                return canvas;
+            }
+
+            // Create metadata frame with transfer info (QR-encoded)
+            encodeMetadataFrame(filename, filesize, totalDataFrames) {
+                // Create a special data packet with metadata
+                // Format: "META" (4 bytes) + frame count (4 bytes) + filename length (2 bytes) + filename
+                const encoder = new TextEncoder();
+                const filenameBytes = encoder.encode(filename);
+                
+                const metadataSize = 4 + 4 + 2 + filenameBytes.length;
+                const metadataArray = new Uint8Array(metadataSize);
+                
+                // Magic header "META"
+                metadataArray[0] = 77;  // 'M'
+                metadataArray[1] = 69;  // 'E'
+                metadataArray[2] = 84;  // 'T'
+                metadataArray[3] = 65;  // 'A'
+                
+                // Frame count (4 bytes, big-endian)
+                metadataArray[4] = (totalDataFrames >> 24) & 0xFF;
+                metadataArray[5] = (totalDataFrames >> 16) & 0xFF;
+                metadataArray[6] = (totalDataFrames >> 8) & 0xFF;
+                metadataArray[7] = totalDataFrames & 0xFF;
+                
+                // Filename length (2 bytes)
+                metadataArray[8] = (filenameBytes.length >> 8) & 0xFF;
+                metadataArray[9] = filenameBytes.length & 0xFF;
+                
+                // Filename bytes
+                metadataArray.set(filenameBytes, 10);
+                
+                // Encode as binary string
+                const binaryString = Array.from(metadataArray)
+                    .map(byte => byte.toString(2).padStart(8, '0'))
+                    .join('');
+                
+                // Create visual frame with special marker
+                const canvas = this.encodeDataToCanvas(binaryString, true);
+                return canvas;
+            }
+
+            // Create end-of-transfer frame (QR-encoded)
+            encodeEndFrame(totalDataFrames) {
+                // Create a special data packet with end marker
+                // Format: "END!" (4 bytes) + frame count (4 bytes)
+                const endArray = new Uint8Array(8);
+                
+                // Magic header "END!"
+                endArray[0] = 69;  // 'E'
+                endArray[1] = 78;  // 'N'
+                endArray[2] = 68;  // 'D'
+                endArray[3] = 33;  // '!'
+                
+                // Frame count (4 bytes, big-endian)
+                endArray[4] = (totalDataFrames >> 24) & 0xFF;
+                endArray[5] = (totalDataFrames >> 16) & 0xFF;
+                endArray[6] = (totalDataFrames >> 8) & 0xFF;
+                endArray[7] = totalDataFrames & 0xFF;
+                
+                // Encode as binary string
+                const binaryString = Array.from(endArray)
+                    .map(byte => byte.toString(2).padStart(8, '0'))
+                    .join('');
+                
+                // Create visual frame with special marker
+                const canvas = this.encodeDataToCanvas(binaryString, true);
+                return canvas;
+            }
         }
 
         // Simple Audio Encoder for synchronization and metadata
@@ -651,31 +784,43 @@
                     // Encode frames with chunked processing to prevent timeout
                     const encoder = new SimpleVisualEncoder(mode, ecc);
                     const chunkSize = 300; // Reduced from 500 for faster encoding
-                    const totalFrames = Math.ceil(uint8Array.length / chunkSize);
+                    const totalDataFrames = Math.ceil(uint8Array.length / chunkSize);
                     
                     frames = [];
                     
-                    // Process frames in batches to avoid blocking
+                    // Add metadata frame at the beginning
+                    const metadataFrame = encoder.encodeMetadataFrame(
+                        selectedFile.name,
+                        selectedFile.size,
+                        totalDataFrames
+                    );
+                    frames.push(metadataFrame);
+                    
+                    // Process data frames in batches to avoid blocking
                     const batchSize = 5; // Process 5 frames at a time
-                    for (let i = 0; i < totalFrames; i += batchSize) {
-                        const batchEnd = Math.min(i + batchSize, totalFrames);
+                    for (let i = 0; i < totalDataFrames; i += batchSize) {
+                        const batchEnd = Math.min(i + batchSize, totalDataFrames);
                         
                         // Process batch
                         for (let j = i; j < batchEnd; j++) {
                             const start = j * chunkSize;
                             const end = Math.min(start + chunkSize, uint8Array.length);
                             const chunk = uint8Array.slice(start, end);
-                            const canvas = encoder.encodeFrame(chunk, j, totalFrames);
+                            const canvas = encoder.encodeFrame(chunk, j, totalDataFrames);
                             frames.push(canvas);
                         }
                         
                         // Update progress
-                        const progress = ((i + batchSize) / totalFrames * 100).toFixed(0);
+                        const progress = ((i + batchSize) / totalDataFrames * 100).toFixed(0);
                         startBtn.textContent = `Encoding... ${Math.min(progress, 100)}%`;
                         
                         // Yield to browser to prevent timeout (every batch)
                         await new Promise(resolve => setTimeout(resolve, 0));
                     }
+
+                    // Add end frame
+                    const endFrame = encoder.encodeEndFrame(totalDataFrames);
+                    frames.push(endFrame);
 
                     document.getElementById('frameCount').textContent = frames.length;
                     startBtn.textContent = 'Start Transfer';

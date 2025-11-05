@@ -527,12 +527,15 @@
         let scanInterval = null;
         let receivedFrames = new Map();
         let frameHashes = new Set(); // Track unique frames by hash
-        let totalFrames = 0;
+        let totalFrames = 0; // Total frames detected
+        let expectedDataFrames = 0; // Expected number of data frames from metadata
         let totalDataBytes = []; // Changed from string to byte array
         let decoder = new SimpleVisualDecoder();
         let lastDetectionTime = 0;
         let detectionCooldown = 200; // ms between frame captures
         let startSignalDetected = false;
+        let metadataReceived = false; // Track if we got the START frame
+        let endFrameReceived = false; // Track if we got the END frame
 
         // Elements
         const videoElement = document.getElementById('videoElement');
@@ -749,6 +752,96 @@
             }
         }
 
+        // Check for special control frames (metadata/end markers)
+        function checkForControlFrame(imageData) {
+            // Look for red marker in bottom-right corner (12x12 pixels)
+            const width = imageData.width;
+            const height = imageData.height;
+            const data = imageData.data;
+            
+            let redPixelCount = 0;
+            const checkSize = 12;
+            
+            // Check bottom-right corner for red marker
+            for (let y = height - checkSize; y < height; y++) {
+                for (let x = width - checkSize; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    
+                    // Check if predominantly red (R > 200, G < 100, B < 100)
+                    if (r > 200 && g < 100 && b < 100) {
+                        redPixelCount++;
+                    }
+                }
+            }
+            
+            // If enough red pixels found, it's a control frame
+            if (redPixelCount > 50) {
+                return { isControlFrame: true };
+            }
+            
+            return { isControlFrame: false };
+        }
+
+        // Extract frame count from metadata frame
+        function extractFrameCountFromMetadata(imageData) {
+            try {
+                // Decode the frame data using the visual decoder
+                const decoder = new SimpleVisualDecoder('BALANCED');
+                const decodedBytes = decoder.decodeFrame(imageData);
+                
+                if (!decodedBytes || decodedBytes.length < 8) {
+                    return 0;
+                }
+                
+                // Check for "META" magic header
+                if (decodedBytes[0] === 77 && decodedBytes[1] === 69 && 
+                    decodedBytes[2] === 84 && decodedBytes[3] === 65) {
+                    
+                    // Extract frame count (bytes 4-7, big-endian)
+                    const frameCount = (decodedBytes[4] << 24) | 
+                                     (decodedBytes[5] << 16) | 
+                                     (decodedBytes[6] << 8) | 
+                                     decodedBytes[7];
+                    
+                    // Extract filename if present
+                    if (decodedBytes.length > 10) {
+                        const filenameLength = (decodedBytes[8] << 8) | decodedBytes[9];
+                        if (decodedBytes.length >= 10 + filenameLength) {
+                            const filenameBytes = decodedBytes.slice(10, 10 + filenameLength);
+                            const filename = new TextDecoder().decode(filenameBytes);
+                            console.log('📄 Original filename:', filename);
+                            // Store filename for later use
+                            window.originalFilename = filename;
+                        }
+                    }
+                    
+                    console.log('📊 Metadata detected - Expected frames:', frameCount);
+                    return frameCount;
+                }
+                
+                // Check for "END!" magic header
+                if (decodedBytes[0] === 69 && decodedBytes[1] === 78 && 
+                    decodedBytes[2] === 68 && decodedBytes[3] === 33) {
+                    
+                    const frameCount = (decodedBytes[4] << 24) | 
+                                     (decodedBytes[5] << 16) | 
+                                     (decodedBytes[6] << 8) | 
+                                     decodedBytes[7];
+                    
+                    console.log('🏁 End frame detected - Total frames:', frameCount);
+                    return -1; // Special marker for end frame
+                }
+                
+            } catch (error) {
+                console.error('Error extracting metadata:', error);
+            }
+            
+            return 0;
+        }
+
         // Scan frame for QR code
         function scanFrame() {
             if (!isScanning) return;
@@ -765,7 +858,57 @@
             ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
             const imageData = ctx.getImageData(0, 0, canvasElement.width, canvasElement.height);
             
-            // Use our custom decoder
+            // Check for control frames (START/END markers)
+            const controlCheck = checkForControlFrame(imageData);
+            
+            if (controlCheck.isControlFrame) {
+                // This is a metadata or end frame - try to extract info
+                const frameCount = extractFrameCountFromMetadata(imageData);
+                
+                if (frameCount > 0 && !metadataReceived) {
+                    // This is the START metadata frame
+                    metadataReceived = true;
+                    expectedDataFrames = frameCount;
+                    addLog(`📋 START frame detected - Expecting ${frameCount} data frames`, 'success');
+                    
+                    scanIndicator.textContent = 'Receiving data...';
+                    scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
+                    
+                    // Auto-start receiving on metadata frame
+                    if (!isReceiving) {
+                        isReceiving = true;
+                        startSignalDetected = true;
+                        startReceivingBtn.disabled = true;
+                    }
+                    return;
+                } else if (frameCount === -1) {
+                    // This is the END frame
+                    if (!endFrameReceived) {
+                        endFrameReceived = true;
+                        addLog('🏁 END frame detected - Checking completion...', 'info');
+                        
+                        // Check if we have all data frames
+                        checkTransferCompletion();
+                    }
+                    return;
+                } else if (!metadataReceived) {
+                    // Control frame but couldn't decode - treat as START anyway
+                    metadataReceived = true;
+                    addLog('📋 START frame detected - Transfer beginning!', 'success');
+                    
+                    scanIndicator.textContent = 'Receiving data...';
+                    scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
+                    
+                    if (!isReceiving) {
+                        isReceiving = true;
+                        startSignalDetected = true;
+                        startReceivingBtn.disabled = true;
+                    }
+                    return;
+                }
+            }
+            
+            // Use our custom decoder for data frames
             const decoded = decoder.decodeFrame(imageData);
             
             if (decoded && decoded.detected) {
@@ -794,14 +937,42 @@
                     scanIndicator.textContent = `Captured ${frameId + 1} frames`;
                     
                     updateStats();
+                    
+                    // Auto-check completion if we received END frame
+                    if (endFrameReceived) {
+                        checkTransferCompletion();
+                    }
                 }
+            }
+        }
+
+        // Check if transfer is complete and auto-stop
+        function checkTransferCompletion() {
+            const receivedCount = receivedFrames.size;
+            const expectedCount = expectedDataFrames;
+            
+            if (expectedCount > 0 && receivedCount >= expectedCount) {
+                // We have all expected frames!
+                addLog(`✅ Transfer COMPLETE! Received all ${receivedCount}/${expectedCount} frames`, 'success');
+                scanIndicator.textContent = `Complete! ${receivedCount} frames`;
+                scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
+                
+                // Auto-stop receiving
+                setTimeout(() => {
+                    handleTransferComplete();
+                }, 1000); // Small delay to show completion message
+            } else if (endFrameReceived) {
+                // We saw END frame but missing some data frames
+                const missing = expectedCount - receivedCount;
+                addLog(`⚠️ END detected but missing ${missing} frames. Keep scanning...`, 'warn');
+                scanIndicator.textContent = `${receivedCount}/${expectedCount} frames (${missing} missing)`;
             }
         }
 
         // Update statistics
         function updateStats() {
             const detected = receivedFrames.size;
-            const total = totalFrames || detected; // Use detected count if total unknown
+            const total = expectedDataFrames || detected; // Use expected count if known
             const progress = total > 0 ? (detected / total) * 100 : 0;
             const successRate = total > 0 ? ((detected / total) * 100).toFixed(1) : 0;
 
@@ -865,7 +1036,8 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'received_file.bin'; // Generic binary extension
+            // Use original filename if available, otherwise generic name
+            a.download = window.originalFilename || 'received_file.bin';
             a.click();
             URL.revokeObjectURL(url);
             
