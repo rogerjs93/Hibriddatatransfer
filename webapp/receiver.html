@@ -261,6 +261,7 @@
 
             <div class="controls">
                 <button class="btn" id="startBtn">📷 Start Camera</button>
+                <button class="btn" id="startReceivingBtn" disabled>▶ Start Receiving</button>
                 <button class="btn" id="stopBtn" disabled>⏹ Stop</button>
                 <button class="btn" id="saveBtn" disabled>💾 Save File</button>
             </div>
@@ -539,6 +540,7 @@
         const videoElement = document.getElementById('videoElement');
         const canvasElement = document.getElementById('canvasElement');
         const startBtn = document.getElementById('startBtn');
+        const startReceivingBtn = document.getElementById('startReceivingBtn');
         const stopBtn = document.getElementById('stopBtn');
         const saveBtn = document.getElementById('saveBtn');
         const scanIndicator = document.getElementById('scanIndicator');
@@ -590,14 +592,17 @@
                 
                 videoElement.srcObject = stream;
                 startBtn.disabled = true;
+                startReceivingBtn.disabled = false; // Enable manual start
                 stopBtn.disabled = false;
                 isScanning = true;
                 
                 if (enableAudio) {
                     addLog('Camera + microphone started successfully', 'success');
                     setupAudioDetection(stream);
+                    addLog('🎵 Waiting for audio start signal (triple beep)...', 'info');
                 } else {
                     addLog('Camera started successfully', 'success');
+                    addLog('👆 Click "Start Receiving" button when ready', 'info');
                 }
                 
                 scanIndicator.textContent = 'Scanning...';
@@ -609,6 +614,18 @@
             } catch (err) {
                 addLog('Failed to access camera/microphone: ' + err.message, 'error');
                 alert('Could not access camera/microphone. Please grant permissions and try again.');
+            }
+        });
+
+        // Manual start receiving button
+        startReceivingBtn.addEventListener('click', () => {
+            if (!isReceiving && isScanning) {
+                isReceiving = true;
+                startSignalDetected = true;
+                startReceivingBtn.disabled = true;
+                addLog('👍 Manual start - Transfer beginning!', 'success');
+                scanIndicator.textContent = 'Transfer Started - Capturing...';
+                scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
             }
         });
 
@@ -632,6 +649,7 @@
             isReceiving = false;
             startSignalDetected = false;
             startBtn.disabled = false;
+            startReceivingBtn.disabled = true; // Reset manual button
             stopBtn.disabled = true;
             scanIndicator.textContent = 'Stopped';
             scanIndicator.classList.remove('active');
@@ -696,6 +714,7 @@
                                 if (timeDiff1 > 100 && timeDiff1 < 200 && timeDiff2 > 100 && timeDiff2 < 200) {
                                     startSignalDetected = true;
                                     isReceiving = true;
+                                    startReceivingBtn.disabled = true; // Disable manual button
                                     addLog('🎵 START SIGNAL DETECTED - Transfer beginning!', 'success');
                                     scanIndicator.textContent = 'Transfer Started - Capturing...';
                                     scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
@@ -742,18 +761,14 @@
             const decoded = decoder.decodeFrame(imageData);
             
             if (decoded && decoded.detected) {
-                // If audio not enabled, start receiving on first frame detection
-                if (!document.getElementById('enableAudio').checked && !isReceiving) {
-                    isReceiving = true;
-                    startSignalDetected = true;
-                    addLog('👁️ VISUAL FRAME DETECTED - Transfer starting!', 'success');
-                    scanIndicator.textContent = 'Transfer Started - Capturing...';
-                    scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
-                }
-                
-                // Only capture frames after start signal (or first visual detection)
+                // Only capture frames after start signal (manual button or audio beep)
                 if (!isReceiving) {
-                    scanIndicator.textContent = 'Waiting for start signal...';
+                    const enableAudio = document.getElementById('enableAudio').checked;
+                    if (enableAudio) {
+                        scanIndicator.textContent = 'Waiting for audio start signal...';
+                    } else {
+                        scanIndicator.textContent = 'Click "Start Receiving" to begin...';
+                    }
                     return;
                 }
                 

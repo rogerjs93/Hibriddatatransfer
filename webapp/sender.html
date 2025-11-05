@@ -709,9 +709,19 @@
 
         function displayFrame(canvas) {
             const ctx = qrDisplay.getContext('2d');
-            qrDisplay.width = canvas.width;
-            qrDisplay.height = canvas.height;
-            ctx.drawImage(canvas, 0, 0);
+            
+            // Scale to fill display area while maintaining aspect ratio
+            const displayWidth = qrDisplay.parentElement.clientWidth - 40; // Account for padding
+            const displayHeight = window.innerHeight * 0.7; // 70% of viewport
+            
+            // Set canvas to larger size for better visibility
+            const scale = Math.min(displayWidth / canvas.width, displayHeight / canvas.height, 2.5); // Max 2.5x scale
+            qrDisplay.width = canvas.width * scale;
+            qrDisplay.height = canvas.height * scale;
+            
+            // Draw scaled image
+            ctx.imageSmoothingEnabled = false; // Keep pixels sharp
+            ctx.drawImage(canvas, 0, 0, qrDisplay.width, qrDisplay.height);
         }
 
         function updateStats() {
