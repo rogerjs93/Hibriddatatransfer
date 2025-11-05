@@ -146,9 +146,8 @@
             margin-top: 30px;
             display: none;
             position: relative;
-            min-height: 400px; /* Reduced minimum */
-            max-height: 90vh; /* Don't exceed viewport */
-            overflow: auto; /* Allow scrolling if needed */
+            min-height: 600px; /* Larger minimum to accommodate QR code */
+            max-height: none; /* Remove height restriction */
             text-align: center; /* Center the canvas */
         }
 
@@ -159,7 +158,8 @@
         #qrDisplay {
             /* Don't set width/height in CSS - let JavaScript control canvas size */
             max-width: 100%;
-            max-height: 80vh;
+            min-width: 400px; /* Ensure minimum display size */
+            min-height: 400px; /* Ensure minimum display size */
             margin: 0 auto;
             display: block;
             /* Prevent blurriness on scaled images */
@@ -890,20 +890,23 @@
         function displayFrame(canvas) {
             const ctx = qrDisplay.getContext('2d');
             
-            // Get available display space
+            // Get container dimensions (recalculate each time as layout may have changed)
             const container = qrDisplay.parentElement;
-            const maxDisplayWidth = Math.min(container.clientWidth - 40, 1000); // Max 1000px wide
-            const maxDisplayHeight = Math.min(window.innerHeight * 0.8, 1000); // Max 1000px tall
+            const containerRect = container.getBoundingClientRect();
             
-            // Calculate scale to fit (maintain aspect ratio, fill available space)
-            const scaleX = maxDisplayWidth / canvas.width;
-            const scaleY = maxDisplayHeight / canvas.height;
-            const scale = Math.min(scaleX, scaleY, 3); // Allow up to 3x scaling
+            // Use larger base size - prefer width over height since QR codes are square
+            const availableWidth = Math.max(containerRect.width - 40, 400);
+            const availableHeight = Math.max(window.innerHeight * 0.6, 400); // Use 60% of viewport minimum
+            
+            // Calculate scale to fill available space (up to 3x)
+            const scaleX = availableWidth / canvas.width;
+            const scaleY = availableHeight / canvas.height;
+            const scale = Math.max(Math.min(scaleX, scaleY, 3), 1); // At least 1x, up to 3x
             
             const scaledWidth = Math.floor(canvas.width * scale);
             const scaledHeight = Math.floor(canvas.height * scale);
             
-            console.log(`📐 Display: canvas ${canvas.width}x${canvas.height} → display ${scaledWidth}x${scaledHeight} (${scale.toFixed(2)}x)`);
+            console.log(`📐 Display: canvas ${canvas.width}x${canvas.height} → display ${scaledWidth}x${scaledHeight} (${scale.toFixed(2)}x), container: ${Math.floor(containerRect.width)}x${Math.floor(containerRect.height)}`);
             
             // Set canvas display size
             qrDisplay.width = scaledWidth;
