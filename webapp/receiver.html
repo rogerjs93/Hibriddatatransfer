@@ -1009,35 +1009,147 @@
             
             document.getElementById('receivedData').classList.add('active');
             
-            // Show preview (convert bytes to text for display, with fallback for binary)
+            // Detect file type
+            const fileType = detectFileType(totalDataBytes);
+            
+            // Show preview based on file type
             const previewBytes = totalDataBytes.slice(0, 500);
             let preview = '';
-            try {
-                // Try to decode as UTF-8 text
-                const decoder = new TextDecoder('utf-8', { fatal: true });
-                preview = decoder.decode(new Uint8Array(previewBytes));
-            } catch (e) {
-                // Binary data - show hex preview
-                preview = 'Binary data (hex): ' + previewBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+            
+            // Add file type header
+            preview = `📁 File Type: ${fileType.description} (.${fileType.extension})\n`;
+            preview += `📊 Size: ${totalDataBytes.length.toLocaleString()} bytes (${(totalDataBytes.length / 1024).toFixed(2)} KB)\n\n`;
+            
+            if (fileType.extension === 'txt' || fileType.extension === 'html' || fileType.extension === 'xml') {
+                // Text files - show content
+                try {
+                    const decoder = new TextDecoder('utf-8', { fatal: true });
+                    preview += 'Content Preview:\n' + decoder.decode(new Uint8Array(previewBytes));
+                } catch (e) {
+                    preview += 'Binary data (hex): ' + previewBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+                }
+            } else {
+                // Binary files - show hex dump
+                preview += 'Binary Data (hex preview):\n';
+                preview += previewBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
             }
+            
             document.getElementById('dataPreview').textContent = preview + 
                 (totalDataBytes.length > 500 ? '\n... (truncated)' : '');
             
             saveBtn.disabled = false;
-            addLog('Transfer complete! 🎉', 'success');
+            addLog(`Transfer complete! Detected: ${fileType.description} 🎉`, 'success');
             scanIndicator.textContent = 'Complete!';
+        }
+
+        // Detect file type from magic numbers (file signatures)
+        function detectFileType(bytes) {
+            if (!bytes || bytes.length < 4) {
+                return { extension: 'bin', mimeType: 'application/octet-stream', description: 'Unknown' };
+            }
+
+            // Convert first bytes to hex for comparison
+            const header = Array.from(bytes.slice(0, 16))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+
+            // Common file signatures
+            const signatures = [
+                // Images
+                { magic: 'ffd8ff', extension: 'jpg', mimeType: 'image/jpeg', description: 'JPEG Image' },
+                { magic: '89504e47', extension: 'png', mimeType: 'image/png', description: 'PNG Image' },
+                { magic: '47494638', extension: 'gif', mimeType: 'image/gif', description: 'GIF Image' },
+                { magic: '424d', extension: 'bmp', mimeType: 'image/bmp', description: 'Bitmap Image' },
+                { magic: '49492a00', extension: 'tif', mimeType: 'image/tiff', description: 'TIFF Image' },
+                { magic: '4d4d002a', extension: 'tif', mimeType: 'image/tiff', description: 'TIFF Image' },
+                { magic: '52494646', extension: 'webp', mimeType: 'image/webp', description: 'WebP Image' },
+                
+                // Documents
+                { magic: '25504446', extension: 'pdf', mimeType: 'application/pdf', description: 'PDF Document' },
+                { magic: '504b0304', extension: 'zip', mimeType: 'application/zip', description: 'ZIP Archive' },
+                { magic: 'd0cf11e0a1b11ae1', extension: 'doc', mimeType: 'application/msword', description: 'MS Word Document' },
+                
+                // Office (modern - all ZIP-based)
+                { magic: '504b030414000600', extension: 'docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', description: 'Word Document' },
+                { magic: '504b030414000800', extension: 'xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', description: 'Excel Spreadsheet' },
+                
+                // Text/Code
+                { magic: 'efbbbf', extension: 'txt', mimeType: 'text/plain', description: 'Text File (UTF-8 BOM)' },
+                { magic: '3c3f786d6c', extension: 'xml', mimeType: 'text/xml', description: 'XML Document' },
+                { magic: '3c68746d6c', extension: 'html', mimeType: 'text/html', description: 'HTML Document' },
+                { magic: '3c21444f43545950', extension: 'html', mimeType: 'text/html', description: 'HTML Document' },
+                
+                // Media
+                { magic: '1a45dfa3', extension: 'mkv', mimeType: 'video/x-matroska', description: 'Matroska Video' },
+                { magic: '000001ba', extension: 'mpg', mimeType: 'video/mpeg', description: 'MPEG Video' },
+                { magic: '000001b3', extension: 'mpg', mimeType: 'video/mpeg', description: 'MPEG Video' },
+                { magic: '66747970', extension: 'mp4', mimeType: 'video/mp4', description: 'MP4 Video' },
+                { magic: '494433', extension: 'mp3', mimeType: 'audio/mpeg', description: 'MP3 Audio' },
+                { magic: 'fff1', extension: 'aac', mimeType: 'audio/aac', description: 'AAC Audio' },
+                { magic: 'fff9', extension: 'aac', mimeType: 'audio/aac', description: 'AAC Audio' },
+                { magic: '4f676753', extension: 'ogg', mimeType: 'audio/ogg', description: 'OGG Audio' },
+                
+                // Archives
+                { magic: '1f8b', extension: 'gz', mimeType: 'application/gzip', description: 'GZIP Archive' },
+                { magic: '377abcaf271c', extension: '7z', mimeType: 'application/x-7z-compressed', description: '7-Zip Archive' },
+                { magic: '526172211a07', extension: 'rar', mimeType: 'application/x-rar-compressed', description: 'RAR Archive' },
+                
+                // Executables
+                { magic: '4d5a', extension: 'exe', mimeType: 'application/x-msdownload', description: 'Windows Executable' },
+                { magic: '7f454c46', extension: 'elf', mimeType: 'application/x-executable', description: 'Linux Executable' },
+            ];
+
+            // Check against known signatures
+            for (const sig of signatures) {
+                if (header.startsWith(sig.magic)) {
+                    return sig;
+                }
+            }
+
+            // Check if it's likely text (all printable ASCII + common whitespace)
+            let likelyText = true;
+            const sampleSize = Math.min(512, bytes.length);
+            for (let i = 0; i < sampleSize; i++) {
+                const byte = bytes[i];
+                // Allow printable ASCII (32-126), newlines (10,13), tabs (9)
+                if (!(byte >= 32 && byte <= 126) && byte !== 10 && byte !== 13 && byte !== 9) {
+                    likelyText = false;
+                    break;
+                }
+            }
+
+            if (likelyText) {
+                return { extension: 'txt', mimeType: 'text/plain', description: 'Text File' };
+            }
+
+            // Unknown binary file
+            return { extension: 'bin', mimeType: 'application/octet-stream', description: 'Binary File' };
         }
 
         // Save file
         saveBtn.addEventListener('click', () => {
             // Convert byte array to Uint8Array and create binary blob
             const uint8Array = new Uint8Array(totalDataBytes);
-            const blob = new Blob([uint8Array], { type: 'application/octet-stream' });
+            
+            // Detect file type
+            const fileType = detectFileType(uint8Array);
+            console.log('📝 Detected file type:', fileType.description, `(.${fileType.extension})`);
+            
+            const blob = new Blob([uint8Array], { type: fileType.mimeType });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            // Use original filename if available, otherwise generic name
-            a.download = window.originalFilename || 'received_file.bin';
+            
+            // Use original filename if available, otherwise use detected extension
+            if (window.originalFilename) {
+                a.download = window.originalFilename;
+            } else {
+                // Generate filename with detected extension
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                a.download = `received_${timestamp}.${fileType.extension}`;
+            }
+            
+            addLog(`💾 Saving as: ${a.download} (${fileType.description})`, 'success');
             a.click();
             URL.revokeObjectURL(url);
             
