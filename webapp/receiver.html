@@ -1004,15 +1004,27 @@
             const progress = total > 0 ? (detected / total) * 100 : 0;
             const successRate = total > 0 ? ((detected / total) * 100).toFixed(1) : 0;
 
+            // Calculate total data size from all received frames
+            let totalBytes = 0;
+            receivedFrames.forEach(frameData => {
+                totalBytes += frameData.data.length;
+            });
+
             document.getElementById('framesDetected').textContent = detected;
             document.getElementById('successRate').textContent = successRate + '%';
             document.getElementById('progress').textContent = progress.toFixed(1) + '%';
             document.getElementById('progressBar').style.width = Math.min(progress, 100) + '%';
-            document.getElementById('dataReceived').textContent = (totalDataBytes.length / 1024).toFixed(1) + ' KB';
+            document.getElementById('dataReceived').textContent = (totalBytes / 1024).toFixed(1) + ' KB';
             
             // Enable save button if we have any data
-            if (totalDataBytes.length > 0) {
+            if (totalBytes > 0) {
                 saveBtn.disabled = false;
+                
+                // Reassemble data for preview
+                if (receivedFrames.size > 0) {
+                    reassembleData();
+                }
+                
                 document.getElementById('receivedData').classList.add('active');
                 
                 // Show preview (convert bytes to text for display, with fallback for binary)
