@@ -363,11 +363,16 @@
                 const moduleSize = 4;
                 canvas.width = this.moduleCount * moduleSize;
                 canvas.height = this.moduleCount * moduleSize;
+                
+                console.log(`🏗️ Creating source canvas: moduleCount=${this.moduleCount}, moduleSize=${moduleSize}, canvas=${canvas.width}x${canvas.height}`);
+                
                 const ctx = canvas.getContext('2d');
                 
                 // TEST: Fill entire canvas with a color to see if it's all there
                 ctx.fillStyle = '#00FF00'; // Green background
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                console.log(`✅ Filled green rect from (0,0) to (${canvas.width},${canvas.height})`);
 
                 // Use ImageData for faster pixel manipulation
                 const imageData = ctx.createImageData(canvas.width, canvas.height);
