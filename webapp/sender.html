@@ -244,8 +244,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📡 HVATP Sender</h1>
-            <p>Hybrid Visual + Audio Transfer Protocol</p>
+            <h1>📡 HVATP Sender - DEBUG VERSION v2.0</h1>
+            <p>Hybrid Visual + Audio Transfer Protocol - Testing Canvas Display</p>
         </div>
 
         <div class="content">
@@ -934,6 +934,13 @@
             ctx.drawImage(canvas, 0, 0, scaledWidth, scaledHeight);
             
             console.log(`✅ Drew image from (0,0,${canvas.width},${canvas.height}) to (0,0,${scaledWidth},${scaledHeight})`);
+            
+            // Force a test draw - fill with bright red to see if ANYTHING shows
+            if (currentFrame === 1) {
+                console.log('🔴 TEST: Filling canvas with RED for first frame to test visibility');
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(0, 0, scaledWidth, scaledHeight);
+            }
         }
 
         function updateStats() {
