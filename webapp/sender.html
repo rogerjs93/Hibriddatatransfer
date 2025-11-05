@@ -159,6 +159,7 @@
         #qrDisplay {
             /* Don't set width/height in CSS - let JavaScript control canvas size */
             /* REMOVED max-width: 100% - was constraining scaled canvas! */
+            /* REMOVED object-fit: contain - was causing clipping! */
             min-width: 400px; /* Ensure minimum display size */
             min-height: 400px; /* Ensure minimum display size */
             margin: 0 auto;
@@ -168,7 +169,8 @@
             image-rendering: -moz-crisp-edges;
             image-rendering: pixelated;
             -ms-interpolation-mode: nearest-neighbor;
-            object-fit: contain;
+            /* Add debug border to see actual canvas bounds */
+            border: 2px solid lime;
         }
 
         .stats {
@@ -912,6 +914,10 @@
             // Set canvas display size
             qrDisplay.width = scaledWidth;
             qrDisplay.height = scaledHeight;
+            
+            // AFTER setting size, check what the browser actually rendered
+            const actualRect = qrDisplay.getBoundingClientRect();
+            console.log(`🔍 Actual canvas element: ${Math.floor(actualRect.width)}x${Math.floor(actualRect.height)} | CSS: ${qrDisplay.style.width} x ${qrDisplay.style.height}`);
             
             // Fill with white background
             ctx.fillStyle = '#FFFFFF';
