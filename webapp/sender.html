@@ -158,10 +158,7 @@
 
         #qrDisplay {
             /* Don't set width/height in CSS - let JavaScript control canvas size */
-            /* REMOVED max-width: 100% - was constraining scaled canvas! */
-            /* REMOVED object-fit: contain - was causing clipping! */
-            min-width: 400px; /* Ensure minimum display size */
-            min-height: 400px; /* Ensure minimum display size */
+            /* JavaScript sets BOTH canvas.width/height AND style.width/height */
             margin: 0 auto;
             display: block;
             /* Prevent blurriness on scaled images */
@@ -911,9 +908,14 @@
             
             console.log(`📐 Display: canvas ${canvas.width}x${canvas.height} → display ${scaledWidth}x${scaledHeight} (${scale.toFixed(2)}x), container: ${Math.floor(containerRect.width)}x${Math.floor(containerRect.height)}`);
             
-            // Set canvas display size
+            // Set BOTH canvas pixel dimensions AND CSS dimensions
+            // Canvas pixel dimensions (internal resolution)
             qrDisplay.width = scaledWidth;
             qrDisplay.height = scaledHeight;
+            
+            // CSS dimensions (how browser displays it) - MUST match pixel dimensions!
+            qrDisplay.style.width = `${scaledWidth}px`;
+            qrDisplay.style.height = `${scaledHeight}px`;
             
             // AFTER setting size, check what the browser actually rendered
             const actualRect = qrDisplay.getBoundingClientRect();
