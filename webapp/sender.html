@@ -364,6 +364,10 @@
                 canvas.width = this.moduleCount * moduleSize;
                 canvas.height = this.moduleCount * moduleSize;
                 const ctx = canvas.getContext('2d');
+                
+                // TEST: Fill entire canvas with a color to see if it's all there
+                ctx.fillStyle = '#00FF00'; // Green background
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                 // Use ImageData for faster pixel manipulation
                 const imageData = ctx.createImageData(canvas.width, canvas.height);
@@ -424,6 +428,8 @@
 
                 // Put the image data on canvas
                 ctx.putImageData(imageData, 0, 0);
+                
+                console.log(`🎨 Created source canvas: ${canvas.width}x${canvas.height}, ImageData: ${imageData.width}x${imageData.height}`);
 
                 // Add finder patterns (after pixel data)
                 this.addFinderPatterns(ctx, moduleSize);
