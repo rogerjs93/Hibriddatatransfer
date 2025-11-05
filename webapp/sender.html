@@ -936,13 +936,25 @@
             ctx.fillRect(0, 0, scaledWidth, scaledHeight);
             
             // Draw scaled image with crisp pixels
+            // Use 9-parameter version for explicit source->dest mapping
             ctx.imageSmoothingEnabled = false;
             ctx.webkitImageSmoothingEnabled = false;
             ctx.mozImageSmoothingEnabled = false;
             ctx.msImageSmoothingEnabled = false;
-            ctx.drawImage(canvas, 0, 0, scaledWidth, scaledHeight);
             
-            console.log(`✅ Drew image from (0,0,${canvas.width},${canvas.height}) to (0,0,${scaledWidth},${scaledHeight})`);
+            // drawImage(source, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
+            // Copy entire source (0,0,400,400) to entire dest (0,0,556,556)
+            ctx.drawImage(
+                canvas,           // source canvas
+                0, 0,            // source x, y
+                canvas.width,    // source width (400)
+                canvas.height,   // source height (400)
+                0, 0,            // dest x, y
+                scaledWidth,     // dest width (556)
+                scaledHeight     // dest height (556)
+            );
+            
+            console.log(`✅ Drew image from source(0,0,${canvas.width},${canvas.height}) to dest(0,0,${scaledWidth},${scaledHeight})`);
         }
 
         function updateStats() {
