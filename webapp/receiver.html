@@ -637,6 +637,10 @@
 
         // Stop camera
         stopBtn.addEventListener('click', () => {
+            // Reassemble data before stopping
+            if (receivedFrames.size > 0) {
+                reassembleData();
+            }
             stopScanning();
         });
 
@@ -929,9 +933,14 @@
                 if (!frameHashes.has(decoded.hash)) {
                     frameHashes.add(decoded.hash);
                     
+                    // Extract frame ID from the decoded data if available
+                    // For now, use received order but store the data separately
                     const frameId = receivedFrames.size;
-                    receivedFrames.set(frameId, decoded.data);
-                    totalDataBytes.push(...decoded.data); // Append bytes to array
+                    receivedFrames.set(frameId, {
+                        data: decoded.data,
+                        hash: decoded.hash,
+                        timestamp: Date.now()
+                    });
                     
                     addLog(`✓ Frame ${frameId + 1} captured (${decoded.data.length} bytes)`, 'success');
                     scanIndicator.textContent = `Captured ${frameId + 1} frames`;
@@ -946,6 +955,22 @@
             }
         }
 
+        // Reassemble data frames in correct order
+        function reassembleData() {
+            totalDataBytes = [];
+            
+            // Sort frames by their order and concatenate
+            const sortedFrames = Array.from(receivedFrames.entries())
+                .sort((a, b) => a[0] - b[0]); // Sort by frame number
+            
+            for (const [frameId, frameData] of sortedFrames) {
+                totalDataBytes.push(...frameData.data);
+            }
+            
+            console.log(`📦 Reassembled ${sortedFrames.length} frames into ${totalDataBytes.length} bytes`);
+            console.log(`🔍 First 16 bytes:`, totalDataBytes.slice(0, 16));
+        }
+
         // Check if transfer is complete and auto-stop
         function checkTransferCompletion() {
             const receivedCount = receivedFrames.size;
@@ -956,6 +981,9 @@
                 addLog(`✅ Transfer COMPLETE! Received all ${receivedCount}/${expectedCount} frames`, 'success');
                 scanIndicator.textContent = `Complete! ${receivedCount} frames`;
                 scanIndicator.style.background = 'rgba(76, 175, 80, 0.9)';
+                
+                // Reassemble data in correct order
+                reassembleData();
                 
                 // Auto-stop receiving
                 setTimeout(() => {
