@@ -146,6 +146,8 @@
             margin-top: 30px;
             display: none;
             position: relative;
+            min-height: 500px; /* Ensure container is tall enough */
+            text-align: center; /* Center the canvas */
         }
 
         .display-area.active {
@@ -153,8 +155,7 @@
         }
 
         #qrDisplay {
-            width: 100%;
-            height: auto;
+            /* Don't set width/height in CSS - let JavaScript control canvas size */
             max-width: 100%;
             max-height: 80vh;
             margin: 0 auto;
@@ -724,12 +725,20 @@
             
             // Set canvas to larger size for better visibility
             const scale = Math.min(displayWidth / canvas.width, displayHeight / canvas.height, 2.5); // Max 2.5x scale
-            qrDisplay.width = canvas.width * scale;
-            qrDisplay.height = canvas.height * scale;
+            const scaledWidth = Math.floor(canvas.width * scale);
+            const scaledHeight = Math.floor(canvas.height * scale);
+            
+            // Setting width/height clears canvas, so set first
+            qrDisplay.width = scaledWidth;
+            qrDisplay.height = scaledHeight;
+            
+            // Fill with white background first (in case of transparency issues)
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, scaledWidth, scaledHeight);
             
             // Draw scaled image
             ctx.imageSmoothingEnabled = false; // Keep pixels sharp
-            ctx.drawImage(canvas, 0, 0, qrDisplay.width, qrDisplay.height);
+            ctx.drawImage(canvas, 0, 0, scaledWidth, scaledHeight);
         }
 
         function updateStats() {
