@@ -27,7 +27,7 @@
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             max-width: 900px;
             width: 100%;
-            overflow: hidden;
+            overflow: visible; /* Allow QR code to show fully */
         }
 
         .header {
@@ -148,6 +148,7 @@
             position: relative;
             min-height: 600px; /* Larger minimum to accommodate QR code */
             max-height: none; /* Remove height restriction */
+            overflow: visible; /* Don't clip the canvas */
             text-align: center; /* Center the canvas */
         }
 
