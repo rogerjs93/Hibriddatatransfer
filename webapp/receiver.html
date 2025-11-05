@@ -1053,6 +1053,10 @@
                 .map(b => b.toString(16).padStart(2, '0'))
                 .join('');
 
+            // Debug: log the first bytes
+            console.log('🔍 File header (first 16 bytes):', header);
+            console.log('🔍 First 4 bytes as array:', Array.from(bytes.slice(0, 4)));
+
             // Common file signatures
             const signatures = [
                 // Images
@@ -1102,9 +1106,12 @@
             // Check against known signatures
             for (const sig of signatures) {
                 if (header.startsWith(sig.magic)) {
+                    console.log('✅ Matched signature:', sig.description);
                     return sig;
                 }
             }
+
+            console.log('❌ No signature match found');
 
             // Check if it's likely text (all printable ASCII + common whitespace)
             let likelyText = true;
@@ -1119,10 +1126,12 @@
             }
 
             if (likelyText) {
+                console.log('📝 Detected as text file');
                 return { extension: 'txt', mimeType: 'text/plain', description: 'Text File' };
             }
 
             // Unknown binary file
+            console.log('📦 Unknown binary file');
             return { extension: 'bin', mimeType: 'application/octet-stream', description: 'Binary File' };
         }
 
